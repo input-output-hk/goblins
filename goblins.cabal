@@ -25,6 +25,8 @@ library
                      , containers
                      , hedgehog
                      , lens
+                     , mmorph
+                     , monad-control
                      , moo
                      , mtl
                      , transformers

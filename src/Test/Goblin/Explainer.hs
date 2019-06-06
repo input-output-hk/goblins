@@ -21,10 +21,9 @@ explainGoblin
   -> GoblinData Bool
   -> Maybe (Edit EditExpr)
 explainGoblin sig goblin =
-  fmap ITree.nodeValue
-    . runIdentity
+  ITree.treeValue
     . runMaybeT
-    . ITree.runTree
+    . distributeT
     . IGen.runGenT genSize genSeed
     $ do
         newSig <- evalStateT (tinker sig) goblin
@@ -39,10 +38,9 @@ explainGoblinGen
   -> GoblinData Bool
   -> Maybe (Edit EditExpr)
 explainGoblinGen sigGen goblin =
-  fmap ITree.nodeValue
-    . runIdentity
+  ITree.treeValue
     . runMaybeT
-    . ITree.runTree
+    . distributeT
     . IGen.runGenT genSize genSeed
     $ do
         sig    <- sigGen

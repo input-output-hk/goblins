@@ -10,25 +10,36 @@
 {-# LANGUAGE TypeOperators         #-}
 module Test.Goblin where
 
-import Control.Applicative (liftA2)
-import Control.Lens
-import Control.Monad.State.Strict (StateT)
-import Data.Int
-import Data.List (splitAt)
+import           Control.Applicative (liftA2)
+import           Control.Lens
+import           Control.Monad (liftM)
+import           Control.Monad.Morph (MFunctor(..))
+import           Control.Monad.State.Strict (StateT)
+import qualified Control.Monad.State.Strict as Strict
+import           Control.Monad.Trans.Control (MonadTransControl(..))
+import           Control.Monad.Trans.Maybe (MaybeT)
+import           Data.Int
+import           Data.List (splitAt)
 import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Map as Map
-import Data.Ratio (Ratio, (%), numerator, denominator)
-import Data.Typeable (Typeable)
-import Data.TypeRepMap
+import           Data.Ratio (Ratio, (%), numerator, denominator)
+import           Data.Typeable (Typeable)
+import           Data.TypeRepMap (TypeRepMap)
 import qualified Data.TypeRepMap as TM
-import GHC.Generics
-import Hedgehog (Gen)
+import           GHC.Generics
+import           Hedgehog (Gen, MonadGen(..))
+import           Hedgehog.Internal.Gen (GenT(..))
+import           Hedgehog.Internal.Range (Size)
+import           Hedgehog.Internal.Seed (Seed)
+import           Hedgehog.Internal.Tree (TreeT)
 import qualified Hedgehog.Gen as Gen
+import           Hedgehog.Internal.Distributive
+  (MonadTransDistributive(..), MonadTransJuggle(..))
 import qualified Hedgehog.Range as Range
-import Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
-import Moo.GeneticAlgorithm.Types (Genome)
-import Numeric.Natural (Natural)
+import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
+import           Moo.GeneticAlgorithm.Types (Genome)
+import           Numeric.Natural (Natural)
 
 
 data GoblinData g = GoblinData
@@ -46,6 +57,35 @@ makeLenses 'GoblinData
 
 -- | Tinker monad
 type TinkerM g = StateT (GoblinData g) Gen
+
+-- runGenT :: Size -> Seed -> GenT m a -> TreeT (MaybeT m) a
+
+-- @mhueschen: I have no idea whether the `StT` type is correct
+instance MonadTransControl GenT where
+    type StT GenT a = Size -> Seed -> a
+    liftWith f = error "MonadTransControl.liftWith unimplemented for GenT" --GenT (\size seed -> (liftM return (f (\run -> unGenT run size seed))))
+    restoreT action = error "MonadTransControl.restoreT unimplemented for GenT" --GenT (const action)
+    {-# INLINABLE liftWith #-}
+    {-# INLINABLE restoreT #-}
+
+-- @mhueschen: I have no idea whether this instance is correct
+instance MonadTransJuggle GenT where
+  mapStT _ _ f v =
+    (\x y -> (f (v x y)))
+
+  -- f :: Size -> Seed -> (a, s)
+  juggleState _ _ s0 f =
+    (\x y -> fst (f x y), s0)
+
+instance (MonadGen m) => MonadGen (Strict.StateT s m) where
+  type GenBase (Strict.StateT s m) =
+    Strict.StateT s (GenBase m)
+
+  toGenT =
+    distributeT . hoist toGenT
+
+  fromGenT =
+    hoist fromGenT . distributeT
 
 class GeneOps g => Goblin g a where
   -- | Tinker with an item of type 'a'.
