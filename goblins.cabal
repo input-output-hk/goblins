@@ -25,8 +25,11 @@ library
                      , containers
                      , hedgehog
                      , lens
+                     , mmorph
+                     , monad-control
                      , moo
                      , mtl
+                     , random
                      , transformers
                      , tree-diff
                      , typerep-map
