@@ -234,6 +234,10 @@ instance GeneOps a => Goblin a Char where
   tinker b = onGene rummageOrConjure conjure
   conjure = Gen.unicodeAll
 
+instance GeneOps a => Goblin a Integer where
+  tinker = tinkerWithToys [(+), (-), (*)]
+  conjure = toEnum . abs <$> conjure
+
 instance GeneOps a => Goblin a Natural where
   tinker = tinkerWithToys [(+), (*)]
   conjure = toEnum . abs <$> conjure
