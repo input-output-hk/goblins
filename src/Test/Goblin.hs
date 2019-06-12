@@ -15,7 +15,8 @@ import           Control.Lens
 import           Control.Monad (liftM)
 import           Control.Monad.Morph (MFunctor(..))
 import           Control.Monad.State.Strict (StateT)
-import qualified Control.Monad.State.Strict as Strict
+import qualified Control.Monad.State.Strict as State
+import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.Control (MonadTransControl(..))
 import           Control.Monad.Trans.Maybe (MaybeT)
 import           Data.Int
@@ -27,12 +28,13 @@ import           Data.Ratio (Ratio, (%), numerator, denominator)
 import           Data.Typeable (Typeable)
 import           Data.TypeRepMap (TypeRepMap)
 import qualified Data.TypeRepMap as TM
+import           Data.Word (Word64)
 import           GHC.Generics
 import           Hedgehog (Gen, MonadGen(..))
-import           Hedgehog.Internal.Gen (GenT(..))
+import           Hedgehog.Internal.Gen (GenT(..), mapGenT)
 import           Hedgehog.Internal.Range (Size)
 import           Hedgehog.Internal.Seed (Seed)
-import           Hedgehog.Internal.Tree (TreeT)
+import           Hedgehog.Internal.Tree (Tree, TreeT(..))
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Internal.Distributive
   (MonadTransDistributive(..), MonadTransJuggle(..))
@@ -57,35 +59,6 @@ makeLenses 'GoblinData
 
 -- | Tinker monad
 type TinkerM g = StateT (GoblinData g) Gen
-
--- runGenT :: Size -> Seed -> GenT m a -> TreeT (MaybeT m) a
-
--- @mhueschen: I have no idea whether the `StT` type is correct
-instance MonadTransControl GenT where
-    type StT GenT a = Size -> Seed -> a
-    liftWith f = error "MonadTransControl.liftWith unimplemented for GenT" --GenT (\size seed -> (liftM return (f (\run -> unGenT run size seed))))
-    restoreT action = error "MonadTransControl.restoreT unimplemented for GenT" --GenT (const action)
-    {-# INLINABLE liftWith #-}
-    {-# INLINABLE restoreT #-}
-
--- @mhueschen: I have no idea whether this instance is correct
-instance MonadTransJuggle GenT where
-  mapStT _ _ f v =
-    (\x y -> (f (v x y)))
-
-  -- f :: Size -> Seed -> (a, s)
-  juggleState _ _ s0 f =
-    (\x y -> fst (f x y), s0)
-
-instance (MonadGen m) => MonadGen (Strict.StateT s m) where
-  type GenBase (Strict.StateT s m) =
-    Strict.StateT s (GenBase m)
-
-  toGenT =
-    distributeT . hoist toGenT
-
-  fromGenT =
-    hoist fromGenT . distributeT
 
 class GeneOps g => Goblin g a where
   -- | Tinker with an item of type 'a'.
@@ -236,7 +209,7 @@ instance GeneOps a => Goblin a Char where
 
 instance GeneOps a => Goblin a Integer where
   tinker = tinkerWithToys [(+), (-), (*)]
-  conjure = toEnum . abs <$> conjure
+  conjure = toEnum <$> conjure
 
 instance GeneOps a => Goblin a Natural where
   tinker = tinkerWithToys [(+), (*)]
@@ -245,6 +218,10 @@ instance GeneOps a => Goblin a Natural where
 instance GeneOps a => Goblin a Int where
   tinker = tinkerWithToys [(+), (-), (*)]
   conjure = Gen.int (Range.constantFrom 0 (-1000) 1000)
+
+instance GeneOps a => Goblin a Word64 where
+  tinker = tinkerWithToys [(+), (-), (*)]
+  conjure = toEnum . abs <$> conjure
 
 --------------------------------------------------------------------------------
 -- Composite goblins
@@ -328,3 +305,66 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
  -- | Spawn a goblin from a given genome and a bag of tricks.
 spawnGoblin :: Genome g -> TypeRepMap [] -> GoblinData g
 spawnGoblin = GoblinData
+
+
+
+--------------------------------------------------------------------------------
+-- Instances
+--------------------------------------------------------------------------------
+
+  {-
+
+-- runGenT :: Size -> Seed -> GenT m a -> TreeT (MaybeT m) a
+
+-- @mhueschen: I have no idea whether the `StT` type is correct
+instance MonadTransControl GenT where
+    type StT GenT a = Size -> Seed -> a
+    liftWith f =
+      -- GenT (\size seed -> (liftM return (f (\run -> unGenT run size seed))))
+      error "MonadTransControl.liftWith unimplemented for GenT"
+    restoreT action =
+      -- GenT (\size seed -> action)
+      error "MonadTransControl.restoreT unimplemented for GenT"
+    {-# INLINABLE liftWith #-}
+    {-# INLINABLE restoreT #-}
+
+-- @mhueschen: I have no idea whether this instance is correct
+instance MonadTransJuggle GenT where
+  mapStT _ _ f v =
+    (\x y -> (f (v x y)))
+
+  -- f :: Size -> Seed -> (a, s)
+  juggleState _ _ s0 f =
+    (\x y -> fst (f x y), s0)
+    -}
+
+instance MonadGen (State.StateT s Gen) where
+  type GenBase (State.StateT s Gen) =
+    State.StateT s Identity
+
+  -- toGenT :: m a -> GenT (GenBase m) a
+  -- toGenT :: State.StateT s Gen -> GenT (State s) a
+  toGenT m =
+    let genM = State.evalStateT m (error "what goes here?")
+        f :: TreeT (MaybeT Identity) a -> TreeT (MaybeT (State.State s)) a
+        f = hoist g
+        g :: MaybeT Identity a -> MaybeT (State.State s) a
+        g = hoist (pure . runIdentity)
+     in mapGenT f genM
+    -- distributeT . hoist toGenT
+
+  -- fromGenT :: GenT (GenBase m) a -> m a
+  -- fromGenT :: GenT (State s) a -> State.StateT s Gen
+  fromGenT =
+    distributeT
+    -- hoist fromGenT . distributeT
+
+{-
+  -- | Extract a 'GenT' from a  'MonadGen'.
+  --
+  toGenT :: m a -> GenT (GenBase m) a
+
+  -- | Lift a 'GenT' in to a 'MonadGen'.
+  --
+  fromGenT :: GenT (GenBase m) a -> m a
+-}
