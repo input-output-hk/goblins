@@ -93,7 +93,7 @@ class GeneOps g => Goblin g a where
 
   -- TODO mhueschen: decide if we need this
   -- tweak
-  --   :: TinkerM g (a -> a)
+  --   :: TinkerM g (Gen a -> Gen a)
 
   -- default tinker
   --   :: (Generic a, GGoblin g (Rep a))
@@ -253,7 +253,10 @@ instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :*: b) where
 -- Primitive goblins
 --------------------------------------------------------------------------------
 
-instance GeneOps a => Goblin a Bool
+instance GeneOps a => Goblin a Bool where
+  tinker b = onGene rummageOrConjure conjure
+  conjure = pure Gen.bool
+
 instance GeneOps a => Goblin a Char where
   tinker b = onGene rummageOrConjure conjure
   conjure = pure Gen.unicodeAll
@@ -284,7 +287,13 @@ applyPruneShrink f x y = f <$> x <*> y
 -- Composite goblins
 --------------------------------------------------------------------------------
 
-instance (Goblin g a, Goblin g b) => Goblin g (a,b)
+instance (Goblin g a, Goblin g b) => Goblin g (a,b) where
+  tinker p = do
+    x <- tinker (fst <$> p)
+    y <- tinker (snd <$> p)
+    pure ((,) <$> x <*> y)
+
+  conjure = (\x y -> (,) <$> x <*> y) <$> conjure <*> conjure
 
 instance (Integral a, Goblin g a) => Goblin g (Ratio a) where
   tinker obj = do
@@ -294,7 +303,16 @@ instance (Integral a, Goblin g a) => Goblin g (Ratio a) where
 
   conjure = (\x y -> (%) <$> x <*> y) <$> conjure <*> conjure
 
-instance Goblin g a => Goblin g (Maybe a)
+instance Goblin g a => Goblin g (Maybe a) where
+  -- TODO mhueschen | fix this
+  tinker v = undefined
+
+  conjure = do
+    let forJust = do
+          v <- conjure
+          pure (Just <$> v)
+        forNothing = pure (pure Nothing)
+    onGene forJust forNothing
 
 -- | Our list goblin behaves slightly differently, since it pulls whole lists of
 -- things from the bag of tricks, and is also specialised to do some more
