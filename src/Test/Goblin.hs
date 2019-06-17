@@ -390,11 +390,10 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
                    <$> a
                    <*> (Map.fromList <$> (zip <$> (Gen.subsequence =<< k)
                                               <*> (Gen.subsequence =<< v))))
-              -- ks <- Gen.subsequence k
-              -- vs <- Gen.subsequence v
-              -- return $ Map.union a (Map.fromList $ zip ks vs)
-          -- , \a k _ -> Map.withoutKeys a . Set.fromList <$> Gen.subsequence k
-          -- , \a k _ -> Map.restrictKeys a . Set.fromList <$> Gen.subsequence k
+          , \a k _ -> pure (Map.withoutKeys <$> a
+                             <*> (Set.fromList <$> (Gen.subsequence =<< k)))
+          , \a k _ -> pure (Map.restrictKeys <$> a
+                             <*> (Set.fromList <$> (Gen.subsequence =<< k)))
           ]
 
     conjure = do
