@@ -43,7 +43,6 @@ import qualified Hedgehog.Range as Range
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
 import           Moo.GeneticAlgorithm.Types (Genome)
 import           Numeric.Natural (Natural)
-import           System.Random (StdGen(..), randomR)
 
 
 data GoblinData g = GoblinData
@@ -57,7 +56,7 @@ data GoblinData g = GoblinData
     -- things together).
   , _bagOfTricks :: !(TypeRepMap [])
     -- | Hedgehog seed
-  , _gSeed :: StdGen
+  , _gSeed :: Seed
   }
 makeLenses 'GoblinData
 
@@ -337,9 +336,7 @@ instance (Eq a, Typeable a, GeneOps g, Goblin g a) => Goblin g [a] where
          ]
 
   conjure = do
-    gen <- use gSeed
-    let (listLen, gen') = randomR (0, 15) gen
-    gSeed .= gen'
+    listLen <- transcribeGenesAsInt 15
     sequenceA <$> replicateM listLen conjure
 
 instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
@@ -364,9 +361,7 @@ instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
          ]
 
   conjure = do
-    gen <- use gSeed
-    let (listLen, gen') = randomR (0, 15) gen
-    gSeed .= gen'
+    listLen <- transcribeGenesAsInt 15
     cs <- replicateM listLen conjure
     pure (Set.fromList <$> sequenceA cs)
 
@@ -397,9 +392,7 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
           ]
 
     conjure = do
-      gen <- use gSeed
-      let (listLen, gen') = randomR (0, 15) gen
-      gSeed .= gen'
+      listLen <- transcribeGenesAsInt 15
       cs <- replicateM listLen conjure
       pure (Map.fromList <$> sequenceA cs)
 
@@ -408,5 +401,5 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
 --------------------------------------------------------------------------------
 
  -- | Spawn a goblin from a given genome and a bag of tricks.
-spawnGoblin :: Genome g -> TypeRepMap [] -> StdGen -> GoblinData g
+spawnGoblin :: Genome g -> TypeRepMap [] -> Seed -> GoblinData g
 spawnGoblin = GoblinData
