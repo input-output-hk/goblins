@@ -8,13 +8,14 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Test.Goblin where
 
-import           Control.Applicative (liftA2)
+import           Control.Applicative (liftA, liftA2)
 import           Control.Lens
-import           Control.Monad (liftM)
+import           Control.Monad (liftM, replicateM)
 import           Control.Monad.Morph (MFunctor(..))
-import           Control.Monad.State.Strict (StateT)
+import           Control.Monad.State.Strict (State)
 import qualified Control.Monad.State.Strict as State
 import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.Control (MonadTransControl(..))
@@ -42,6 +43,7 @@ import qualified Hedgehog.Range as Range
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
 import           Moo.GeneticAlgorithm.Types (Genome)
 import           Numeric.Natural (Natural)
+import           System.Random (StdGen(..), randomR)
 
 
 data GoblinData g = GoblinData
@@ -54,38 +56,67 @@ data GoblinData g = GoblinData
     -- something different - for example, utilise a monoid instance to add
     -- things together).
   , _bagOfTricks :: !(TypeRepMap [])
+    -- | Hedgehog seed
+  , _gSeed :: StdGen
   }
 makeLenses 'GoblinData
 
 -- | Tinker monad
-type TinkerM g = StateT (GoblinData g) Gen
+type TinkerM g = State (GoblinData g)
+
+type GoblinM g a = TinkerM g (Gen a)
+
+-- type TinkerM g = StateT (GoblinData g) Gen
+-- GenT (StateT (GoblinData g)) a
+
+-- Wrong \/
+-- inside GenT \/
+-- StateT (GoblinData g) (NodeT ...)
+--
+--
+--
+-- type TinkerM g = State (Seed, GoblinData g)
+-- fork the seed when we need new randomness
+--
+-- conjure -> evalGen (flatten, ignore shrinks in result)
+
+-- data Shrink = ... reified function over `a`s
+
+-- tinker :: Shrink a -> Shrink a
+-- ?
 
 class GeneOps g => Goblin g a where
   -- | Tinker with an item of type 'a'.
   tinker
-    :: a
-    -> TinkerM g a
+    :: Gen a
+    -> TinkerM g (Gen a)
 
-  default tinker
-    :: (Generic a, GGoblin g (Rep a))
-    => a
-    -> TinkerM g a
-  tinker a = GHC.Generics.to <$> gTinker (GHC.Generics.from a)
+  -- TODO mhueschen: decide if we need this
+  -- tweak
+  --   :: TinkerM g (a -> a)
+
+  -- default tinker
+  --   :: (Generic a, GGoblin g (Rep a))
+  --   => a
+  --   -> TinkerM g (Gen a)
+  -- tinker a = GHC.Generics.to <$> gTinker (GHC.Generics.from a)
 
   -- | As well as tinkering, goblins can conjure fresh items into existence.
-  conjure :: TinkerM g a
+  conjure :: TinkerM g (Gen a)
 
-  default conjure
-    :: (Generic a, GGoblin g (Rep a))
-    => TinkerM g a
-  conjure = GHC.Generics.to <$> gConjure
+  -- default conjure
+  --   :: (Generic a, GGoblin g (Rep a))
+  --   => TinkerM g (Gen a)
+  -- conjure = GHC.Generics.to <$> gConjure
 
 -- | Construct a tinker function given a set of possible things to do.
 --
 --   Each 'toy' is a function taking the original value and one grabbed from the
 --   bag of tricks or conjured.
 tinkerWithToys
-  :: (Goblin g a, Typeable a, GeneOps g) => [a -> a -> a] -> (a -> TinkerM g a)
+  :: (Goblin g a, Typeable a, GeneOps g)
+  => [Gen a -> Gen a -> Gen a]
+  -> (Gen a -> TinkerM g (Gen a))
 tinkerWithToys toys =
   let
     defaultToys = [const, flip const]
@@ -105,6 +136,7 @@ transcribeGene = do
   case g of
     [] -> error "Genome has run out! Try increasing the size of the genome."
     (x : xs) -> do
+
       genes .= xs
       return x
 
@@ -138,28 +170,45 @@ instance GeneOps Bool where
 --------------------------------------------------------------------------------
 
 -- | Fetch something from the bag of tricks if there's something there.
-rummage :: forall a g . Typeable a => TinkerM g (Maybe a)
+rummage :: forall a g . Typeable a => TinkerM g (Maybe (Gen a))
 rummage = do
   bag <- use bagOfTricks
   case TM.lookup bag of
-    Nothing -> return Nothing
-    Just xs -> Just <$> Gen.element xs
+    Nothing -> pure Nothing
+    -- @mhueschen: \/ will not shrink, I believe
+    Just xs -> pure (Just (Gen.element xs))
 
 -- | Fetch everything from the bag of tricks.
-rummageAll :: forall a g . Typeable a => TinkerM g [a]
+rummageAll :: forall a g . Typeable a => TinkerM g [Gen a]
 rummageAll = do
   bag <- use bagOfTricks
   case TM.lookup bag of
-    Nothing -> return []
-    Just xs -> return xs
+    Nothing -> pure []
+    -- @mhueschen: \/ will not shrink, I believe
+    Just xs -> pure (pure <$> xs)
 
 -- | Fetch something from the bag of tricks, or else conjure it up.
-rummageOrConjure :: forall a g . (Typeable a, Goblin g a) => TinkerM g a
-rummageOrConjure = maybe conjure return =<< rummage
+rummageOrConjure :: forall a g . (Typeable a, Goblin g a) => TinkerM g (Gen a)
+rummageOrConjure = maybe conjure pure =<< rummage
 
 --------------------------------------------------------------------------------
 -- Generic goblins
 --------------------------------------------------------------------------------
+
+{-
+
+so I think I need to perform operations over entire trees here. I'm not sure
+that my tinker type is actually right. maybe it should consume a GenT (TreeT)
+and return one (wrapped in state) as well.
+
+then it can perform operations on all parts of the tree. right now we're
+treating it, oddly, like a regular monad - we expect to bind single variables
+and return them in an `m a` context. however here we want to "leave them in
+their boxes" and work `m a -> m a`.
+
+-}
+
+{- going to leave out generics until I better understand what is going on
 
 class GGoblin g f where
   gTinker :: f a -> TinkerM g (f a)
@@ -186,8 +235,8 @@ instance GGoblin g f => GGoblin g (M1 i t f) where
   gTinker (M1 x) = M1 <$> gTinker x
   gConjure = M1 <$> gConjure
 
--- TODO In the 'tinker' implementations here, we would like to rummageOrConjure
--- rather than just conjuring when we switch to teh other branch
+-- TODO In the 'tinker' implementations here, we would like to `rummageOrConjure`
+-- rather than just conjuring when we switch to the other branch
 instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :+: b) where
   gTinker (L1 x) = onGene (R1 <$> gConjure) (L1 <$> gTinker x)
   gTinker (R1 x) = onGene (L1 <$> gConjure) (R1 <$> gTinker x)
@@ -198,6 +247,8 @@ instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :*: b) where
   gTinker (a :*: b) = liftA2 (:*:) (onGene (gTinker a) (return a)) (onGene (gTinker b) (return b))
   gConjure = liftA2 (:*:) gConjure gConjure
 
+-}
+
 --------------------------------------------------------------------------------
 -- Primitive goblins
 --------------------------------------------------------------------------------
@@ -205,23 +256,29 @@ instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :*: b) where
 instance GeneOps a => Goblin a Bool
 instance GeneOps a => Goblin a Char where
   tinker b = onGene rummageOrConjure conjure
-  conjure = Gen.unicodeAll
+  conjure = pure Gen.unicodeAll
 
 instance GeneOps a => Goblin a Integer where
-  tinker = tinkerWithToys [(+), (-), (*)]
-  conjure = toEnum <$> conjure
+  tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  conjure = pure (Gen.integral (Range.constantFrom 0 (-10^25) (10^25)))
 
 instance GeneOps a => Goblin a Natural where
-  tinker = tinkerWithToys [(+), (*)]
-  conjure = toEnum . abs <$> conjure
+  tinker = tinkerWithToys (map applyPruneShrink [(+), (*)])
+  conjure = pure (Gen.integral (Range.constantFrom 0 0 (10^25)))
 
 instance GeneOps a => Goblin a Int where
-  tinker = tinkerWithToys [(+), (-), (*)]
-  conjure = Gen.int (Range.constantFrom 0 (-1000) 1000)
+  tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  conjure = pure (Gen.int (Range.constantFrom 0 (-1000) 1000))
 
 instance GeneOps a => Goblin a Word64 where
-  tinker = tinkerWithToys [(+), (-), (*)]
-  conjure = toEnum . abs <$> conjure
+  tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  conjure = pure (Gen.integral Range.constantBounded)
+
+
+-- TODO @mhueschen | make this do what the name says
+applyPruneShrink :: (a -> a -> a)
+                 -> Gen a -> Gen a -> Gen a
+applyPruneShrink f x y = f <$> x <*> y
 
 --------------------------------------------------------------------------------
 -- Composite goblins
@@ -231,10 +288,11 @@ instance (Goblin g a, Goblin g b) => Goblin g (a,b)
 
 instance (Integral a, Goblin g a) => Goblin g (Ratio a) where
   tinker obj = do
-    n <- tinker $ numerator obj
-    d <- tinker $ denominator obj
-    return $ n % d
-  conjure = (%) <$> conjure <*> conjure
+    n <- tinker (numerator <$> obj)
+    d <- tinker (denominator <$> obj)
+    pure ((%) <$> n <*> d)
+
+  conjure = (\x y -> (%) <$> x <*> y) <$> conjure <*> conjure
 
 instance Goblin g a => Goblin g (Maybe a)
 
@@ -244,127 +302,94 @@ instance Goblin g a => Goblin g (Maybe a)
 instance (Eq a, Typeable a, GeneOps g, Goblin g a) => Goblin g [a] where
   tinker obj = do
       toy <- (toys !!) <$> transcribeGenesAsInt (length toys - 1)
-      toy obj =<< rummageAll
+      rummaged <- rummageAll
+      val <- (rummaged !!) <$> transcribeGenesAsInt (length rummaged - 1)
+      toy obj val
      where
        -- Toys for lists can use 'TinkerM', because they might be random
-       -- toys :: [[a] -> [a] -> TinkerM g [a]]
+       toys :: Eq a => [Gen [a] -> Gen [a] -> TinkerM g (Gen [a])]
        toys =
-         [ \a _ -> return a
-         , \_ b -> return b
-         , \a _ -> Gen.shuffle a
-         , \a b -> (a ++) <$> Gen.subsequence b
-         , \a b -> (a List.\\) <$> Gen.subsequence b
-         , \a b -> (++) <$> Gen.subsequence a <*> Gen.subsequence b
+         [ \a _ -> pure a
+         , \_ b -> pure b
+         , \a _ -> pure (Gen.shuffle =<< a)
+         , \a b -> pure ((++) <$> a <*> (Gen.subsequence =<< b))
+         , \a b -> pure ((List.\\) <$> a <*> (Gen.subsequence =<< b))
+         , \a b -> pure ((++) <$> (Gen.subsequence =<< a)
+                              <*> (Gen.subsequence =<< b))
          ]
 
-  conjure = Gen.list (Range.constantFrom 5 0 15) conjure
+  conjure = do
+    gen <- use gSeed
+    let (listLen, gen') = randomR (0, 15) gen
+    gSeed .= gen'
+    sequenceA <$> replicateM listLen conjure
 
 instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
   tinker obj = do
       toy <- (toys !!) <$> transcribeGenesAsInt (length toys - 1)
-      toy obj =<< rummageAll
+      rummaged <- rummageAll
+      val <- (rummaged !!) <$> transcribeGenesAsInt (length rummaged - 1)
+      toy obj val
      where
        -- Toys for sets can use 'TinkerM', because they might be random
-       -- toys :: [Set.Set a -> [a] -> TinkerM g (Set.Set a)]
+       toys :: [Gen (Set.Set a) -> Gen [a] -> TinkerM g (Gen (Set.Set a))]
        toys =
-         [ \a _ -> return a
-         , \_ b -> return $ Set.fromList b
-         , \a b -> Set.difference a . Set.fromList <$> Gen.subsequence b
-         , \a b -> Set.union a . Set.fromList <$> Gen.subsequence b
-         , \a b -> return $ a `Set.intersection` Set.fromList b
+         [ \a _ -> pure a
+         , \_ b -> pure (Set.fromList <$> b)
+         , \a b -> pure (Set.difference
+                          <$> a
+                          <*> (Set.fromList <$> (Gen.subsequence =<< b)))
+         , \a b -> pure (Set.union
+                          <$> a
+                          <*> (Set.fromList <$> (Gen.subsequence =<< b)))
+         , \a b -> pure $ (Set.intersection <$> a <*> (Set.fromList <$> b))
          ]
 
-  conjure = Gen.set (Range.constantFrom 5 0 15) conjure
+  conjure = do
+    gen <- use gSeed
+    let (listLen, gen') = randomR (0, 15) gen
+    gSeed .= gen'
+    cs <- replicateM listLen conjure
+    pure (Set.fromList <$> sequenceA cs)
 
 instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
   => Goblin g (Map.Map k v) where
     tinker obj = do
         toy <- (toys !!) <$> transcribeGenesAsInt (length toys - 1)
-        key <- rummageAll
-        val <- rummageAll
+        keyRummage <- rummageAll
+        key <- (keyRummage !!) <$> transcribeGenesAsInt (length keyRummage - 1)
+        valRummage <- rummageAll
+        val <- (valRummage !!) <$> transcribeGenesAsInt (length valRummage - 1)
         toy obj key val
       where
         -- Toys for sets can use 'TinkerM', because they might be random
-        -- toys :: [Map.Map k v -> [k] -> [v] -> TinkerM g (Map.Map k v)]
+        toys :: [Gen (Map.Map k v) -> Gen [k] -> Gen [v]
+                   -> TinkerM g (Gen (Map.Map k v))]
         toys =
-          [ \a _ _ -> return a
-          , \a k v -> do
-              ks <- Gen.subsequence k
-              vs <- Gen.subsequence v
-              return $ Map.union a (Map.fromList $ zip ks vs)
-          , \a k _ -> Map.withoutKeys a . Set.fromList <$> Gen.subsequence k
-          , \a k _ -> Map.restrictKeys a . Set.fromList <$> Gen.subsequence k
+          [ \a _ _ -> pure a
+          , \a k v ->
+            pure (Map.union
+                   <$> a
+                   <*> (Map.fromList <$> (zip <$> (Gen.subsequence =<< k)
+                                              <*> (Gen.subsequence =<< v))))
+              -- ks <- Gen.subsequence k
+              -- vs <- Gen.subsequence v
+              -- return $ Map.union a (Map.fromList $ zip ks vs)
+          -- , \a k _ -> Map.withoutKeys a . Set.fromList <$> Gen.subsequence k
+          -- , \a k _ -> Map.restrictKeys a . Set.fromList <$> Gen.subsequence k
           ]
 
-    conjure = Gen.map (Range.constantFrom 5 0 15) conjure
+    conjure = do
+      gen <- use gSeed
+      let (listLen, gen') = randomR (0, 15) gen
+      gSeed .= gen'
+      cs <- replicateM listLen conjure
+      pure (Map.fromList <$> sequenceA cs)
 
 --------------------------------------------------------------------------------
 -- Training goblins
 --------------------------------------------------------------------------------
 
  -- | Spawn a goblin from a given genome and a bag of tricks.
-spawnGoblin :: Genome g -> TypeRepMap [] -> GoblinData g
+spawnGoblin :: Genome g -> TypeRepMap [] -> StdGen -> GoblinData g
 spawnGoblin = GoblinData
-
-
-
---------------------------------------------------------------------------------
--- Instances
---------------------------------------------------------------------------------
-
-  {-
-
--- runGenT :: Size -> Seed -> GenT m a -> TreeT (MaybeT m) a
-
--- @mhueschen: I have no idea whether the `StT` type is correct
-instance MonadTransControl GenT where
-    type StT GenT a = Size -> Seed -> a
-    liftWith f =
-      -- GenT (\size seed -> (liftM return (f (\run -> unGenT run size seed))))
-      error "MonadTransControl.liftWith unimplemented for GenT"
-    restoreT action =
-      -- GenT (\size seed -> action)
-      error "MonadTransControl.restoreT unimplemented for GenT"
-    {-# INLINABLE liftWith #-}
-    {-# INLINABLE restoreT #-}
-
--- @mhueschen: I have no idea whether this instance is correct
-instance MonadTransJuggle GenT where
-  mapStT _ _ f v =
-    (\x y -> (f (v x y)))
-
-  -- f :: Size -> Seed -> (a, s)
-  juggleState _ _ s0 f =
-    (\x y -> fst (f x y), s0)
-    -}
-
-instance MonadGen (State.StateT s Gen) where
-  type GenBase (State.StateT s Gen) =
-    State.StateT s Identity
-
-  -- toGenT :: m a -> GenT (GenBase m) a
-  -- toGenT :: State.StateT s Gen -> GenT (State s) a
-  toGenT m =
-    let genM = State.evalStateT m (error "what goes here?")
-        f :: TreeT (MaybeT Identity) a -> TreeT (MaybeT (State.State s)) a
-        f = hoist g
-        g :: MaybeT Identity a -> MaybeT (State.State s) a
-        g = hoist (pure . runIdentity)
-     in mapGenT f genM
-    -- distributeT . hoist toGenT
-
-  -- fromGenT :: GenT (GenBase m) a -> m a
-  -- fromGenT :: GenT (State s) a -> State.StateT s Gen
-  fromGenT =
-    distributeT
-    -- hoist fromGenT . distributeT
-
-{-
-  -- | Extract a 'GenT' from a  'MonadGen'.
-  --
-  toGenT :: m a -> GenT (GenBase m) a
-
-  -- | Lift a 'GenT' in to a 'MonadGen'.
-  --
-  fromGenT :: GenT (GenBase m) a -> m a
--}

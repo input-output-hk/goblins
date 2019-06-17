@@ -29,6 +29,7 @@ library
                      , monad-control
                      , moo
                      , mtl
+                     , random
                      , transformers
                      , tree-diff
                      , typerep-map
