@@ -15,6 +15,7 @@ import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Internal.Gen as IGen
 import qualified Hedgehog.Internal.Tree as ITree
 
+{-
 explainGoblin
   :: (Goblin Bool s, ToExpr s)
   => s
@@ -49,3 +50,4 @@ explainGoblinGen sigGen goblin =
  where
   genSize = Range.Size 1
   genSeed = Seed 12345 12345
+-}

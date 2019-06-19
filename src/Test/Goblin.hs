@@ -303,8 +303,9 @@ instance (Integral a, Goblin g a) => Goblin g (Ratio a) where
   conjure = (\x y -> (%) <$> x <*> y) <$> conjure <*> conjure
 
 instance Goblin g a => Goblin g (Maybe a) where
-  -- TODO mhueschen | fix this
-  tinker v = undefined
+  tinker obj = do
+    x <- tinker (Gen.just obj)
+    pure (Gen.maybe x)
 
   conjure = do
     let forJust = do
