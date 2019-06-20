@@ -162,7 +162,10 @@ instance GeneOps Bool where
   transcribeGenesAsInt n = do
     (gs, xs) <- splitAt (bitsNeeded (0,n)) <$> use genes
     genes .= xs
-    return $ decodeBinary (0, n) gs `mod` (n+1)
+    let base = n+1
+    if base == 0
+       then error "transcribeGenesAsInt: divide by zero"
+       else return $ decodeBinary (0, n) gs `mod` base
 
 --------------------------------------------------------------------------------
 -- Bag of tricks
