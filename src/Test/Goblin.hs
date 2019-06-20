@@ -322,22 +322,44 @@ instance Goblin g a => Goblin g (Maybe a) where
 -- messing about with lists.
 instance (Eq a, Typeable a, GeneOps g, Goblin g a) => Goblin g [a] where
   tinker obj = do
-      toy <- (toys !!) <$> transcribeGenesAsInt (length toys - 1)
-      rummaged <- rummageAll
+    rummaged <- rummageAll
+    -- If there's nothing to rummage, we do unary operations
+    -- Otherwise we select BinOps or UnOps based on a gene
+    if (null rummaged)
+       then toyUnOp
+       else onGene toyUnOp (toyBinOp rummaged)
+
+   where
+    toyUnOp :: TinkerM g (Gen [a])
+    toyUnOp = do
+      toy <- (unOpToys !!) <$> transcribeGenesAsInt (length unOpToys - 1)
+      toy obj
+
+    unOpToys :: [Gen [a] -> TinkerM g (Gen [a])]
+    unOpToys =
+      [ \a -> pure a
+      , \a -> pure (Gen.shuffle =<< a)
+      , \a -> pure (Gen.subsequence =<< a)
+      -- TODO mhueschen | consider tinkering with elements here
+      ]
+
+    toyBinOp :: [Gen [a]] -> TinkerM g (Gen [a])
+    toyBinOp rummaged = do
+      toy <- (binOpToys !!) <$> transcribeGenesAsInt (length binOpToys - 1)
       val <- (rummaged !!) <$> transcribeGenesAsInt (length rummaged - 1)
       toy obj val
-     where
-       -- Toys for lists can use 'TinkerM', because they might be random
-       toys :: Eq a => [Gen [a] -> Gen [a] -> TinkerM g (Gen [a])]
-       toys =
-         [ \a _ -> pure a
-         , \_ b -> pure b
-         , \a _ -> pure (Gen.shuffle =<< a)
-         , \a b -> pure ((++) <$> a <*> (Gen.subsequence =<< b))
-         , \a b -> pure ((List.\\) <$> a <*> (Gen.subsequence =<< b))
-         , \a b -> pure ((++) <$> (Gen.subsequence =<< a)
-                              <*> (Gen.subsequence =<< b))
-         ]
+
+    -- Toys for lists can use 'TinkerM', because they might be random
+    binOpToys :: Eq a => [Gen [a] -> Gen [a] -> TinkerM g (Gen [a])]
+    binOpToys =
+      [ \a _ -> pure a
+      , \_ b -> pure b
+      , \a _ -> pure (Gen.shuffle =<< a)
+      , \a b -> pure ((++) <$> a <*> (Gen.subsequence =<< b))
+      , \a b -> pure ((List.\\) <$> a <*> (Gen.subsequence =<< b))
+      , \a b -> pure ((++) <$> (Gen.subsequence =<< a)
+                           <*> (Gen.subsequence =<< b))
+      ]
 
   conjure = do
     listLen <- transcribeGenesAsInt 15
@@ -345,24 +367,46 @@ instance (Eq a, Typeable a, GeneOps g, Goblin g a) => Goblin g [a] where
 
 instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
   tinker obj = do
-      toy <- (toys !!) <$> transcribeGenesAsInt (length toys - 1)
-      rummaged <- rummageAll
+    rummaged <- rummageAll
+    -- If there's nothing to rummage, we do unary operations
+    -- Otherwise we select BinOps or UnOps based on a gene
+    if (null rummaged)
+       then toyUnOp
+       else onGene toyUnOp (toyBinOp rummaged)
+
+   where
+    toyUnOp :: TinkerM g (Gen (Set.Set a))
+    toyUnOp = do
+      toy <- (unOpToys !!) <$> transcribeGenesAsInt (length unOpToys - 1)
+      toy obj
+
+    unOpToys :: [Gen (Set.Set a) -> TinkerM g (Gen (Set.Set a))]
+    unOpToys =
+      [ \a -> pure a
+      , \a -> pure (Set.fromList <$> (Gen.shuffle =<< (Set.toList <$> a)))
+      , \a -> pure (Set.fromList <$> (Gen.subsequence =<< (Set.toList <$> a)))
+      -- TODO mhueschen | consider tinkering with elements here
+      ]
+
+    toyBinOp :: [Gen [a]] -> TinkerM g (Gen (Set.Set a))
+    toyBinOp rummaged = do
+      toy <- (binOpToys !!) <$> transcribeGenesAsInt (length binOpToys - 1)
       val <- (rummaged !!) <$> transcribeGenesAsInt (length rummaged - 1)
       toy obj val
-     where
-       -- Toys for sets can use 'TinkerM', because they might be random
-       toys :: [Gen (Set.Set a) -> Gen [a] -> TinkerM g (Gen (Set.Set a))]
-       toys =
-         [ \a _ -> pure a
-         , \_ b -> pure (Set.fromList <$> b)
-         , \a b -> pure (Set.difference
-                          <$> a
-                          <*> (Set.fromList <$> (Gen.subsequence =<< b)))
-         , \a b -> pure (Set.union
-                          <$> a
-                          <*> (Set.fromList <$> (Gen.subsequence =<< b)))
-         , \a b -> pure $ (Set.intersection <$> a <*> (Set.fromList <$> b))
-         ]
+
+    -- Toys for sets can use 'TinkerM', because they might be random
+    binOpToys :: [Gen (Set.Set a) -> Gen [a] -> TinkerM g (Gen (Set.Set a))]
+    binOpToys =
+      [ \a _ -> pure a
+      , \_ b -> pure (Set.fromList <$> b)
+      , \a b -> pure (Set.difference
+                       <$> a
+                       <*> (Set.fromList <$> (Gen.subsequence =<< b)))
+      , \a b -> pure (Set.union
+                       <$> a
+                       <*> (Set.fromList <$> (Gen.subsequence =<< b)))
+      , \a b -> pure $ (Set.intersection <$> a <*> (Set.fromList <$> b))
+      ]
 
   conjure = do
     listLen <- transcribeGenesAsInt 15
@@ -372,28 +416,50 @@ instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
 instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
   => Goblin g (Map.Map k v) where
     tinker obj = do
-        toy <- (toys !!) <$> transcribeGenesAsInt (length toys - 1)
-        keyRummage <- rummageAll
-        key <- (keyRummage !!) <$> transcribeGenesAsInt (length keyRummage - 1)
-        valRummage <- rummageAll
-        val <- (valRummage !!) <$> transcribeGenesAsInt (length valRummage - 1)
+      rummagedKeys <- rummageAll
+      rummagedVals <- rummageAll
+      -- If there's nothing to rummage, we do unary operations
+      -- Otherwise we select BinOps or UnOps based on a gene
+      if (null rummagedKeys) || (null rummagedVals)
+         then toyUnOp
+         else onGene toyUnOp (toyBinOp rummagedKeys rummagedVals)
+
+     where
+      toyUnOp :: TinkerM g (Gen (Map.Map k v))
+      toyUnOp = do
+        toy <- (unOpToys !!) <$> transcribeGenesAsInt (length unOpToys - 1)
+        toy obj
+
+      unOpToys :: [Gen (Map.Map k v) -> TinkerM g (Gen (Map.Map k v))]
+      unOpToys =
+        [ \a -> pure a
+        , \a -> pure (Map.fromList <$> (Gen.shuffle =<< (Map.toList <$> a)))
+        , \a -> pure (Map.fromList <$> (Gen.subsequence =<< (Map.toList <$> a)))
+        -- TODO mhueschen | consider tinkering with elements here
+        ]
+
+      toyBinOp :: [Gen [k]] -> [Gen [v]] -> TinkerM g (Gen (Map.Map k v))
+      toyBinOp rummagedKeys rummagedVals = do
+        toy <- (binOpToys !!) <$> transcribeGenesAsInt (length binOpToys - 1)
+        key <- (rummagedKeys !!) <$> transcribeGenesAsInt (length rummagedKeys - 1)
+        val <- (rummagedVals !!) <$> transcribeGenesAsInt (length rummagedVals - 1)
         toy obj key val
-      where
-        -- Toys for sets can use 'TinkerM', because they might be random
-        toys :: [Gen (Map.Map k v) -> Gen [k] -> Gen [v]
-                   -> TinkerM g (Gen (Map.Map k v))]
-        toys =
-          [ \a _ _ -> pure a
-          , \a k v ->
-            pure (Map.union
-                   <$> a
-                   <*> (Map.fromList <$> (zip <$> (Gen.subsequence =<< k)
-                                              <*> (Gen.subsequence =<< v))))
-          , \a k _ -> pure (Map.withoutKeys <$> a
-                             <*> (Set.fromList <$> (Gen.subsequence =<< k)))
-          , \a k _ -> pure (Map.restrictKeys <$> a
-                             <*> (Set.fromList <$> (Gen.subsequence =<< k)))
-          ]
+
+      -- Toys for sets can use 'TinkerM', because they might be random
+      binOpToys :: [Gen (Map.Map k v) -> Gen [k] -> Gen [v]
+                -> TinkerM g (Gen (Map.Map k v))]
+      binOpToys =
+        [ \a _ _ -> pure a
+        , \a k v ->
+          pure (Map.union
+                 <$> a
+                 <*> (Map.fromList <$> (zip <$> (Gen.subsequence =<< k)
+                                            <*> (Gen.subsequence =<< v))))
+        , \a k _ -> pure (Map.withoutKeys <$> a
+                           <*> (Set.fromList <$> (Gen.subsequence =<< k)))
+        , \a k _ -> pure (Map.restrictKeys <$> a
+                           <*> (Set.fromList <$> (Gen.subsequence =<< k)))
+        ]
 
     conjure = do
       listLen <- transcribeGenesAsInt 15
