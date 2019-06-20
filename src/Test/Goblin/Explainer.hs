@@ -4,7 +4,7 @@
 module Test.Goblin.Explainer where
 
 import Test.Goblin
-import Control.Monad.State.Strict (evalStateT)
+import Control.Monad.State.Strict (evalState)
 import Control.Monad.Trans.Maybe (runMaybeT)
 import Data.Functor.Identity (runIdentity)
 import Data.TreeDiff
@@ -15,7 +15,6 @@ import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Internal.Gen as IGen
 import qualified Hedgehog.Internal.Tree as ITree
 
-{-
 explainGoblin
   :: (Goblin Bool s, ToExpr s)
   => s
@@ -27,7 +26,7 @@ explainGoblin sig goblin =
     . distributeT
     . IGen.runGenT genSize genSeed
     $ do
-        newSig <- evalStateT (tinker sig) goblin
+        newSig <- evalState (tinker (pure sig)) goblin
         return $ ediff sig newSig
  where
   genSize = Range.Size 1
@@ -45,9 +44,8 @@ explainGoblinGen sigGen goblin =
     . IGen.runGenT genSize genSeed
     $ do
         sig    <- sigGen
-        newSig <- evalStateT (tinker sig) goblin
+        newSig <- evalState (tinker sigGen) goblin
         return $ ediff sig newSig
  where
   genSize = Range.Size 1
   genSeed = Seed 12345 12345
--}
