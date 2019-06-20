@@ -55,8 +55,6 @@ data GoblinData g = GoblinData
     -- something different - for example, utilise a monoid instance to add
     -- things together).
   , _bagOfTricks :: !(TypeRepMap [])
-    -- | Hedgehog seed
-  , _gSeed :: Seed
   }
 makeLenses 'GoblinData
 
@@ -471,5 +469,5 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
 --------------------------------------------------------------------------------
 
  -- | Spawn a goblin from a given genome and a bag of tricks.
-spawnGoblin :: Genome g -> TypeRepMap [] -> Seed -> GoblinData g
+spawnGoblin :: Genome g -> TypeRepMap [] -> GoblinData g
 spawnGoblin = GoblinData
