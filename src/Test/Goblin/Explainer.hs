@@ -34,10 +34,12 @@ explainGoblin sig goblin =
 
 explainGoblinGen
   :: (Goblin Bool s, ToExpr s)
-  => Gen s
+  => Maybe Size
+  -> Maybe Seed
+  -> Gen s
   -> GoblinData Bool
   -> Maybe (Edit EditExpr)
-explainGoblinGen sigGen goblin =
+explainGoblinGen mbSize mbSeed sigGen goblin =
   ITree.treeValue
     . runMaybeT
     . distributeT
@@ -47,5 +49,9 @@ explainGoblinGen sigGen goblin =
         newSig <- evalState (tinker sigGen) goblin
         return $ ediff sig newSig
  where
-  genSize = Range.Size 1
-  genSeed = Seed 12345 12345
+  genSize = case mbSize of
+              Nothing -> Range.Size 1
+              Just sz -> sz
+  genSeed = case mbSeed of
+              Nothing -> Seed 12345 12345
+              Just sd -> sd
