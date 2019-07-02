@@ -46,7 +46,7 @@ import           Numeric.Natural (Natural)
 
 
 data GoblinData g = GoblinData
-  { -- | Remaining genes, controlling how a goblin operates
+  { -- | Remaining genes, controlling how a goblin operates.
     _genes       :: !(Genome g)
     -- | A goblin's bag of tricks contains items of many differnt types. When
     -- tinkering, a goblin (depending on its genome) might look in its bag of
@@ -58,7 +58,7 @@ data GoblinData g = GoblinData
   }
 makeLenses 'GoblinData
 
--- | Tinker monad
+-- | Tinker monad.
 type TinkerM g = State (GoblinData g)
 
 type GoblinM g a = TinkerM g (Gen a)
@@ -87,6 +87,9 @@ class GeneOps g => Goblin g a where
   tinker
     :: Gen a
     -> TinkerM g (Gen a)
+  -- TODO mhueschen: consider what impact of changing the type to
+  -- `tinker :: a -> TinkerM g a`. The list instance, for example, would have
+  -- to change.
 
   -- TODO mhueschen: decide if we need this
   -- tweak
@@ -126,7 +129,7 @@ tinkerWithToys toys =
 -- Gene operations
 --------------------------------------------------------------------------------
 
--- | Read (and consume) a gene from the genome
+-- | Read (and consume) a gene from the genome.
 transcribeGene :: TinkerM g g
 transcribeGene = do
   g <- use genes
@@ -138,12 +141,12 @@ transcribeGene = do
       return x
 
 class GeneOps g where
-  -- | Choose between two actions based on the value of a gene
+  -- | Choose between two actions based on the value of a gene.
   onGene
-       -- | When gene is on
     :: TinkerM g a
-       -- | When gene is off
+    -- ^ When gene is on.
     -> TinkerM g a
+    -- ^ When gene is off.
     -> TinkerM g a
 
   -- | Transcribe sufficient genes to get an integer in the range [0..n].
@@ -468,6 +471,6 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
 -- Training goblins
 --------------------------------------------------------------------------------
 
- -- | Spawn a goblin from a given genome and a bag of tricks.
+-- | Spawn a goblin from a given genome and a bag of tricks.
 spawnGoblin :: Genome g -> TypeRepMap [] -> GoblinData g
 spawnGoblin = GoblinData
