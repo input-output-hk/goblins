@@ -14,6 +14,7 @@ import Hedgehog
 import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Internal.Gen as IGen
 import qualified Hedgehog.Internal.Tree as ITree
+import           Moo.GeneticAlgorithm.Types (Population)
 
 explainGoblin
   :: (Goblin Bool s, ToExpr s)
@@ -55,3 +56,21 @@ explainGoblinGen mbSize mbSeed sigGen goblin =
   genSeed = case mbSeed of
               Nothing -> Seed 12345 12345
               Just sd -> sd
+
+explainGoblinGenFromFile
+  :: (Goblin Bool s, ToExpr s)
+  => Maybe Size
+  -> Maybe Seed
+  -> Gen s
+  -> FilePath
+  -> IO (Maybe (Edit EditExpr))
+explainGoblinGenFromFile mbSize mbSeed sigGen fp = do
+  str <- readFile fp
+  pop <- case reads str :: [(Population Bool,String)] of
+           [(pop,"")] -> pure pop
+           _          -> error ("couldn't parse file: " <> fp)
+  let bestGenome = case pop of
+                     [] -> error "empty population"
+                     ((best,_score):_) -> best
+  let goblin = mkEmptyGoblin bestGenome
+  pure (explainGoblinGen mbSize mbSeed sigGen goblin)

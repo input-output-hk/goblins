@@ -474,3 +474,6 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
 -- | Spawn a goblin from a given genome and a bag of tricks.
 spawnGoblin :: Genome g -> TypeRepMap [] -> GoblinData g
 spawnGoblin = GoblinData
+
+mkEmptyGoblin :: Genome g -> GoblinData g
+mkEmptyGoblin genome = GoblinData genome TM.empty
