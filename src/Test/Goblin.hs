@@ -74,9 +74,13 @@ class (GeneOps g, Typeable a) => Goblin g a where
 -- | Helper function to save a value in the bagOfTricks, and return it.
 saveInBagOfTricks :: forall g a. Typeable a => a -> TinkerM g a
 saveInBagOfTricks x = do
-  bagOfTricks %= TM.adjust ((x:) :: [a] -> [a])
+  bagOfTricks %= consOrInsert
   pure x
-
+ where
+  consOrInsert :: TypeRepMap [] -> TypeRepMap []
+  consOrInsert trm = if TM.member @a trm
+                        then TM.adjust (x:) trm
+                        else TM.insert [x] trm
 
 -- | Construct a tinker function given a set of possible things to do.
 --
