@@ -90,13 +90,17 @@ tinkerWithToys
   :: (AddShrinks a, Goblin g a, Typeable a, GeneOps g)
   => [Gen a -> Gen a -> Gen a]
   -> (Gen a -> TinkerM g (Gen a))
-tinkerWithToys toys =
+tinkerWithToys toys a =
   let
     defaultToys = [const, flip const]
     allToys     = defaultToys ++ toys
-  in \a -> do
+  in conjureOrSave $ do
     toy <- (allToys !!) <$> geneListIndex allToys
     toy a <$> (addShrinks <$> rummageOrConjure)
+
+conjureOrSave :: (Goblin g a, AddShrinks a)
+              => TinkerM g (Gen a) -> TinkerM g (Gen a)
+conjureOrSave m = onGene (addShrinks <$> conjure) $ saveInBagOfTricks =<< m
 
 --------------------------------------------------------------------------------
 -- Gene operations
@@ -266,25 +270,28 @@ applyPruneShrink f x y = f <$> x <*> y
 -- Composite goblins
 --------------------------------------------------------------------------------
 
-instance (Goblin g a, Goblin g b) => Goblin g (a,b) where
-  tinker p = do
+instance (Goblin g a, Goblin g b, AddShrinks a, AddShrinks b)
+      => Goblin g (a,b) where
+  tinker p = conjureOrSave $ do
     x <- tinker (fst <$> p)
     y <- tinker (snd <$> p)
     pure ((,) <$> x <*> y)
 
   conjure = saveInBagOfTricks =<< (,) <$> conjure <*> conjure
 
-instance (Integral a, Goblin g a) => Goblin g (Ratio a) where
-  tinker obj = do
+instance (Integral a, Goblin g a, AddShrinks a)
+      => Goblin g (Ratio a) where
+  tinker obj = conjureOrSave $ do
     n <- tinker (numerator <$> obj)
     d <- tinker (denominator <$> obj)
     pure ((%) <$> n <*> d)
 
   conjure = saveInBagOfTricks =<< (%) <$> conjure <*> conjure
 
-instance Goblin g a => Goblin g (Maybe a) where
+instance (Goblin g a, AddShrinks a)
+      => Goblin g (Maybe a) where
   -- TODO mhueschen - reconsider this. it seems suspect.
-  tinker obj = do
+  tinker obj = conjureOrSave $ do
     x <- tinker (Gen.just obj)
     pure (Gen.maybe x)
 
@@ -296,7 +303,7 @@ instance Goblin g a => Goblin g (Maybe a) where
 -- messing about with lists.
 instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
       => Goblin g [a] where
-  tinker obj = do
+  tinker obj = conjureOrSave $ do
     rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
     -- If there's nothing to rummage, we do unary operations
     -- Otherwise we select BinOps or UnOps based on a gene
@@ -342,7 +349,7 @@ instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
 
 instance (Goblin g a, Ord a, AddShrinks a, Typeable a)
       => Goblin g (Set.Set a) where
-  tinker obj = do
+  tinker obj = conjureOrSave $ do
     rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
     -- If there's nothing to rummage, we do unary operations
     -- Otherwise we select BinOps or UnOps based on a gene
@@ -389,10 +396,10 @@ instance (Goblin g a, Ord a, AddShrinks a, Typeable a)
     cs <- replicateM listLen conjure
     pure (Set.fromList cs)
 
-instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v,
+instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, AddShrinks (Map.Map k v),
           AddShrinks k, AddShrinks v, Typeable k, Typeable v)
          => Goblin g (Map.Map k v) where
-    tinker obj = do
+    tinker obj = conjureOrSave $ do
       rummagedKeys <- (map (sequenceA . map addShrinks)) <$> rummageAll
       rummagedVals <- (map (sequenceA . map addShrinks)) <$> rummageAll
       -- If there's nothing to rummage, we do unary operations
@@ -485,3 +492,15 @@ instance AddShrinks Integer where
 instance AddShrinks Natural where
 instance AddShrinks Int where
 instance AddShrinks Word64 where
+instance (AddShrinks a, AddShrinks b) => AddShrinks (a, b) where
+  addShrinks = pure
+instance (AddShrinks k, AddShrinks v) => AddShrinks (Map.Map k v) where
+  addShrinks = pure
+instance AddShrinks a => AddShrinks [a] where
+  addShrinks = pure
+instance AddShrinks a => AddShrinks (Set.Set a) where
+  addShrinks = pure
+instance AddShrinks a => AddShrinks (Maybe a) where
+  addShrinks = pure
+instance AddShrinks a => AddShrinks (Ratio a) where
+  addShrinks = pure
