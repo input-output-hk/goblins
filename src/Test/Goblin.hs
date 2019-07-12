@@ -290,9 +290,10 @@ instance Goblin g a => Goblin g (Maybe a) where
 -- | Our list goblin behaves slightly differently, since it pulls whole lists of
 -- things from the bag of tricks, and is also specialised to do some more
 -- messing about with lists.
-instance (Eq a, Typeable a, GeneOps g, Goblin g a) => Goblin g [a] where
+instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
+      => Goblin g [a] where
   tinker obj = do
-    rummaged <- rummageAll
+    rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
     -- If there's nothing to rummage, we do unary operations
     -- Otherwise we select BinOps or UnOps based on a gene
     if (null rummaged)
@@ -335,9 +336,10 @@ instance (Eq a, Typeable a, GeneOps g, Goblin g a) => Goblin g [a] where
     listLen <- transcribeGenesAsInt 15
     replicateM listLen conjure
 
-instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
+instance (Goblin g a, Ord a, AddShrinks a, Typeable a)
+      => Goblin g (Set.Set a) where
   tinker obj = do
-    rummaged <- rummageAll
+    rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
     -- If there's nothing to rummage, we do unary operations
     -- Otherwise we select BinOps or UnOps based on a gene
     if (null rummaged)
@@ -383,11 +385,12 @@ instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
     cs <- replicateM listLen conjure
     pure (Set.fromList cs)
 
-instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
-  => Goblin g (Map.Map k v) where
+instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v,
+          AddShrinks k, AddShrinks v, Typeable k, Typeable v)
+         => Goblin g (Map.Map k v) where
     tinker obj = do
-      rummagedKeys <- rummageAll
-      rummagedVals <- rummageAll
+      rummagedKeys <- (map (sequenceA . map addShrinks)) <$> rummageAll
+      rummagedVals <- (map (sequenceA . map addShrinks)) <$> rummageAll
       -- If there's nothing to rummage, we do unary operations
       -- Otherwise we select BinOps or UnOps based on a gene
       if (null rummagedKeys) || (null rummagedVals)
