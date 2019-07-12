@@ -63,12 +63,19 @@ makeLenses 'GoblinData
 type TinkerM g = State (GoblinData g)
 
 
-class GeneOps g => Goblin g a where
+class (GeneOps g, Typeable a) => Goblin g a where
   -- | Tinker with an item of type 'a'.
   tinker :: Gen a -> TinkerM g (Gen a)
 
   -- | As well as tinkering, goblins can conjure fresh items into existence.
   conjure :: TinkerM g a
+
+
+-- | Helper function to save a value in the bagOfTricks, and return it.
+saveInBagOfTricks :: forall g a. Typeable a => a -> TinkerM g a
+saveInBagOfTricks x = do
+  bagOfTricks %= TM.adjust ((x:) :: [a] -> [a])
+  pure x
 
 
 -- | Construct a tinker function given a set of possible things to do.
@@ -221,29 +228,29 @@ instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :*: b) where
 
 instance GeneOps a => Goblin a Bool where
   tinker b = addShrinks <$> onGene rummageOrConjure conjure
-  conjure = onGene (pure True) (pure False)
+  conjure = saveInBagOfTricks =<< onGene (pure True) (pure False)
 
 instance GeneOps a => Goblin a Char where
   tinker b = addShrinks <$> onGene rummageOrConjure conjure
   -- TODO : this uses up 21 bits of genome, and we may not be interested in thorough
   -- coverage of the Char space
-  conjure = chr <$> transcribeGenesAsInt 1114111
+  conjure = saveInBagOfTricks =<< chr <$> transcribeGenesAsInt 1114111
 
 instance GeneOps a => Goblin a Integer where
   tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
-  conjure = toEnum <$> conjure
+  conjure = saveInBagOfTricks =<< toEnum <$> conjure
 
 instance GeneOps a => Goblin a Natural where
   tinker = tinkerWithToys (map applyPruneShrink [(+), (*)])
-  conjure = fromIntegral <$> transcribeGenesAsInt 2000
+  conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Int where
   tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
-  conjure = (\x -> x-1000) <$> transcribeGenesAsInt 2000
+  conjure = saveInBagOfTricks =<< (\x -> x-1000) <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Word64 where
   tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
-  conjure = fromIntegral <$> transcribeGenesAsInt 2000
+  conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
 
 
 -- TODO @mhueschen | make this do what the name says
@@ -261,7 +268,7 @@ instance (Goblin g a, Goblin g b) => Goblin g (a,b) where
     y <- tinker (snd <$> p)
     pure ((,) <$> x <*> y)
 
-  conjure = (,) <$> conjure <*> conjure
+  conjure = saveInBagOfTricks =<< (,) <$> conjure <*> conjure
 
 instance (Integral a, Goblin g a) => Goblin g (Ratio a) where
   tinker obj = do
@@ -269,7 +276,7 @@ instance (Integral a, Goblin g a) => Goblin g (Ratio a) where
     d <- tinker (denominator <$> obj)
     pure ((%) <$> n <*> d)
 
-  conjure = (%) <$> conjure <*> conjure
+  conjure = saveInBagOfTricks =<< (%) <$> conjure <*> conjure
 
 instance Goblin g a => Goblin g (Maybe a) where
   -- TODO mhueschen - reconsider this. it seems suspect.
@@ -277,7 +284,7 @@ instance Goblin g a => Goblin g (Maybe a) where
     x <- tinker (Gen.just obj)
     pure (Gen.maybe x)
 
-  conjure =
+  conjure = saveInBagOfTricks =<<
     onGene (pure Nothing) (Just <$> conjure)
 
 -- | Our list goblin behaves slightly differently, since it pulls whole lists of
@@ -324,7 +331,7 @@ instance (Eq a, Typeable a, GeneOps g, Goblin g a) => Goblin g [a] where
                            <*> (Gen.subsequence =<< b))
       ]
 
-  conjure = do
+  conjure = saveInBagOfTricks =<< do
     listLen <- transcribeGenesAsInt 15
     replicateM listLen conjure
 
@@ -371,7 +378,7 @@ instance (Goblin g a, Ord a, Typeable a) =>  Goblin g (Set.Set a) where
       , \a b -> pure $ (Set.intersection <$> a <*> (Set.fromList <$> b))
       ]
 
-  conjure = do
+  conjure = saveInBagOfTricks =<< do
     listLen <- transcribeGenesAsInt 15
     cs <- replicateM listLen conjure
     pure (Set.fromList cs)
@@ -424,7 +431,7 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, Typeable k, Typeable v)
                            <*> (Set.fromList <$> (Gen.subsequence =<< k)))
         ]
 
-    conjure = do
+    conjure = saveInBagOfTricks =<< do
       listLen <- transcribeGenesAsInt 15
       cs <- replicateM listLen conjure
       pure (Map.fromList cs)
