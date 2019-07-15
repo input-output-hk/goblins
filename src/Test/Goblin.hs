@@ -96,11 +96,11 @@ tinkerWithToys toys a =
     allToys     = defaultToys ++ toys
   in conjureOrSave $ do
     toy <- (allToys !!) <$> geneListIndex allToys
-    toy a <$> (addShrinks <$> rummageOrConjure)
+    toy a <$> tinkerRummagedOrConjure
 
 conjureOrSave :: (Goblin g a, AddShrinks a)
               => TinkerM g (Gen a) -> TinkerM g (Gen a)
-conjureOrSave m = onGene (addShrinks <$> conjure) $ saveInBagOfTricks =<< m
+conjureOrSave m = onGene tinkerRummagedOrConjure (saveInBagOfTricks =<< m)
 
 --------------------------------------------------------------------------------
 -- Gene operations
@@ -171,6 +171,14 @@ rummageAll = do
 -- | Fetch something from the bag of tricks, or else conjure it up.
 rummageOrConjure :: forall a g . (Typeable a, Goblin g a) => TinkerM g a
 rummageOrConjure = maybe conjure pure =<< rummage
+
+tinkerRummagedOrConjure :: forall a g . (Typeable a, Goblin g a, AddShrinks a)
+                        => TinkerM g (Gen a)
+tinkerRummagedOrConjure = do
+  mR <- rummage
+  case mR of
+    Nothing -> addShrinks <$> conjure
+    Just  v -> onGene (tinker v) (pure v)
 
 --------------------------------------------------------------------------------
 -- Generic goblins
