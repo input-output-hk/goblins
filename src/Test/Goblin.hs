@@ -258,20 +258,28 @@ instance GeneOps a => Goblin a Char where
   conjure = saveInBagOfTricks =<< chr <$> transcribeGenesAsInt 1114111
 
 instance GeneOps a => Goblin a Integer where
-  tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< toEnum <$> conjure
 
 instance GeneOps a => Goblin a Natural where
-  tinker = tinkerWithToys (map applyPruneShrink [(+), (*)])
+  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (*)])
   conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Int where
-  tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< (\x -> x-1000) <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Word64 where
-  tinker = tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
+
+-- | This instance generates Double values in range [0..1] (inclusive) at 0.01
+-- increments. 0.01, 0.02 ... 0.99, 1.00
+instance GeneOps a => Goblin a Double where
+  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  conjure = saveInBagOfTricks =<< do
+    i <- transcribeGenesAsInt 100
+    pure (fromIntegral i / 100)
 
 
 -- TODO @mhueschen | make this do what the name says
@@ -495,6 +503,7 @@ class AddShrinks a where
 
 instance AddShrinks Bool where
 instance AddShrinks Char where
+instance AddShrinks Double where
 instance AddShrinks Integer where
 instance AddShrinks Natural where
 instance AddShrinks Int where
