@@ -67,8 +67,19 @@ class (GeneOps g, Typeable a) => Goblin g a where
   -- | Tinker with an item of type 'a'.
   tinker :: Gen a -> TinkerM g (Gen a)
 
+  default tinker
+    :: (Generic a, GGoblin g (Rep a))
+    => Gen a
+    -> TinkerM g (Gen a)
+  tinker x = GHC.Generics.to <$$> gTinker (GHC.Generics.from <$> x)
+
   -- | As well as tinkering, goblins can conjure fresh items into existence.
   conjure :: TinkerM g a
+
+  default conjure
+    :: (Generic a, GGoblin g (Rep a))
+    => TinkerM g a
+  conjure = GHC.Generics.to <$> gConjure
 
 
 -- | Helper function to save a value in the bagOfTricks, and return it.
@@ -184,23 +195,8 @@ tinkerRummagedOrConjure = do
 -- Generic goblins
 --------------------------------------------------------------------------------
 
-{-
-
-so I think I need to perform operations over entire trees here. I'm not sure
-that my tinker type is actually right. maybe it should consume a GenT (TreeT)
-and return one (wrapped in state) as well.
-
-then it can perform operations on all parts of the tree. right now we're
-treating it, oddly, like a regular monad - we expect to bind single variables
-and return them in an `m a` context. however here we want to "leave them in
-their boxes" and work `m a -> m a`.
-
--}
-
-{- going to leave out generics until I better understand what is going on
-
 class GGoblin g f where
-  gTinker :: f a -> TinkerM g (f a)
+  gTinker :: Gen (f a) -> TinkerM g (Gen (f a))
   gConjure :: TinkerM g (f a)
 
 -- gRummageOrConjure
@@ -217,12 +213,16 @@ instance GGoblin g U1 where
   gConjure = return U1
 
 instance Goblin g c => GGoblin g (K1 i c) where
-  gTinker x = K1 <$> tinker (unK1 x)
+  gTinker x = K1 <$$> tinker (unK1 <$> x)
   gConjure = K1 <$> conjure
 
 instance GGoblin g f => GGoblin g (M1 i t f) where
-  gTinker (M1 x) = M1 <$> gTinker x
+  gTinker x = M1 <$$> gTinker (unM1 <$> x)
   gConjure = M1 <$> gConjure
+
+{-
+
+Can't easily derive Goblin instances for (Gen a) where a is a sum type.
 
 -- TODO In the 'tinker' implementations here, we would like to `rummageOrConjure`
 -- rather than just conjuring when we switch to the other branch
@@ -231,12 +231,17 @@ instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :+: b) where
   gTinker (R1 x) = onGene (L1 <$> gConjure) (R1 <$> gTinker x)
 
   gConjure = onGene (L1 <$> gConjure) (R1 <$> gConjure)
+-}
 
-instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :*: b) where
-  gTinker (a :*: b) = liftA2 (:*:) (onGene (gTinker a) (return a)) (onGene (gTinker b) (return b))
+instance (GeneOps g, GGoblin g a, GGoblin g b)
+  => GGoblin g (a :*: b) where
+  gTinker obj =
+    let objA = (\(a :*: _) -> a) <$> obj
+        objB = (\(_ :*: b) -> b) <$> obj
+     in (:*:) <$$> (onGene (gTinker objA) (pure objA))
+              <**> (onGene (gTinker objB) (pure objB))
   gConjure = liftA2 (:*:) gConjure gConjure
 
--}
 
 --------------------------------------------------------------------------------
 -- Primitive goblins
@@ -280,12 +285,6 @@ applyPruneShrink f x y = f <$> x <*> y
 
 instance (Goblin g a, Goblin g b, AddShrinks a, AddShrinks b)
       => Goblin g (a,b) where
-  tinker p = conjureOrSave $ do
-    x <- tinker (fst <$> p)
-    y <- tinker (snd <$> p)
-    pure ((,) <$> x <*> y)
-
-  conjure = saveInBagOfTricks =<< (,) <$> conjure <*> conjure
 
 instance (Integral a, Goblin g a, AddShrinks a)
       => Goblin g (Ratio a) where
@@ -512,3 +511,16 @@ instance AddShrinks a => AddShrinks (Maybe a) where
   addShrinks = pure
 instance AddShrinks a => AddShrinks (Ratio a) where
   addShrinks = pure
+
+
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
+
+(<$$>) :: (Functor f, Functor g)
+       => (a -> b) -> f (g a) -> f (g b)
+(<$$>) = fmap . fmap
+
+(<**>) :: (Applicative f, Applicative g)
+       => f (g (a -> b)) -> f (g a) -> f (g b)
+(<**>) f x = (\g y -> g <*> y) <$> f <*> x
