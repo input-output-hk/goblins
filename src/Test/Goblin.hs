@@ -68,18 +68,19 @@ class (GeneOps g, Typeable a) => Goblin g a where
   tinker :: Gen a -> TinkerM g (Gen a)
 
   default tinker
-    :: (Generic a, GGoblin g (Rep a))
+    :: (Generic a, GGoblin g (Rep a), AddShrinks a, Typeable a)
     => Gen a
     -> TinkerM g (Gen a)
-  tinker x = GHC.Generics.to <$$> gTinker (GHC.Generics.from <$> x)
+  tinker x = tinkerRummagedOrConjureOrSave $
+     GHC.Generics.to <$$> gTinker (GHC.Generics.from <$> x)
 
   -- | As well as tinkering, goblins can conjure fresh items into existence.
   conjure :: TinkerM g a
 
   default conjure
-    :: (Generic a, GGoblin g (Rep a))
+    :: (Generic a, GGoblin g (Rep a), AddShrinks a, Typeable a)
     => TinkerM g a
-  conjure = GHC.Generics.to <$> gConjure
+  conjure = saveInBagOfTricks =<< (GHC.Generics.to <$> gConjure)
 
 
 -- | Helper function to save a value in the bagOfTricks, and return it.
@@ -105,13 +106,14 @@ tinkerWithToys toys a =
   let
     defaultToys = [const, flip const]
     allToys     = defaultToys ++ toys
-  in conjureOrSave $ do
+  in tinkerRummagedOrConjureOrSave $ do
     toy <- (allToys !!) <$> geneListIndex allToys
     toy a <$> tinkerRummagedOrConjure
 
-conjureOrSave :: (Goblin g a, AddShrinks a)
-              => TinkerM g (Gen a) -> TinkerM g (Gen a)
-conjureOrSave m = onGene tinkerRummagedOrConjure (saveInBagOfTricks =<< m)
+tinkerRummagedOrConjureOrSave :: (Goblin g a, AddShrinks a)
+                              => TinkerM g (Gen a) -> TinkerM g (Gen a)
+tinkerRummagedOrConjureOrSave m =
+  onGene tinkerRummagedOrConjure (saveInBagOfTricks =<< m)
 
 --------------------------------------------------------------------------------
 -- Gene operations
@@ -258,25 +260,30 @@ instance GeneOps a => Goblin a Char where
   conjure = saveInBagOfTricks =<< chr <$> transcribeGenesAsInt 1114111
 
 instance GeneOps a => Goblin a Integer where
-  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  tinker = tinkerRummagedOrConjureOrSave
+           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< toEnum <$> conjure
 
 instance GeneOps a => Goblin a Natural where
-  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (*)])
+  tinker = tinkerRummagedOrConjureOrSave
+           . tinkerWithToys (map applyPruneShrink [(+), (*)])
   conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Int where
-  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  tinker = tinkerRummagedOrConjureOrSave
+           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< (\x -> x-1000) <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Word64 where
-  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  tinker = tinkerRummagedOrConjureOrSave
+           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
 
 -- | This instance generates Double values in range [0..1] (inclusive) at 0.01
 -- increments. 0.01, 0.02 ... 0.99, 1.00
 instance GeneOps a => Goblin a Double where
-  tinker = conjureOrSave . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+  tinker = tinkerRummagedOrConjureOrSave
+           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< do
     i <- transcribeGenesAsInt 100
     pure (fromIntegral i / 100)
@@ -296,7 +303,7 @@ instance (Goblin g a, Goblin g b, AddShrinks a, AddShrinks b)
 
 instance (Integral a, Goblin g a, AddShrinks a)
       => Goblin g (Ratio a) where
-  tinker obj = conjureOrSave $ do
+  tinker obj = tinkerRummagedOrConjureOrSave $ do
     n <- tinker (numerator <$> obj)
     d <- tinker (denominator <$> obj)
     pure ((%) <$> n <*> d)
@@ -306,7 +313,7 @@ instance (Integral a, Goblin g a, AddShrinks a)
 instance (Goblin g a, AddShrinks a)
       => Goblin g (Maybe a) where
   -- TODO mhueschen - reconsider this. it seems suspect.
-  tinker obj = conjureOrSave $ do
+  tinker obj = tinkerRummagedOrConjureOrSave $ do
     x <- tinker (Gen.just obj)
     pure (Gen.maybe x)
 
@@ -318,7 +325,7 @@ instance (Goblin g a, AddShrinks a)
 -- messing about with lists.
 instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
       => Goblin g [a] where
-  tinker obj = conjureOrSave $ do
+  tinker obj = tinkerRummagedOrConjureOrSave $ do
     rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
     -- If there's nothing to rummage, we do unary operations
     -- Otherwise we select BinOps or UnOps based on a gene
@@ -364,7 +371,7 @@ instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
 
 instance (Goblin g a, Ord a, AddShrinks a, Typeable a)
       => Goblin g (Set.Set a) where
-  tinker obj = conjureOrSave $ do
+  tinker obj = tinkerRummagedOrConjureOrSave $ do
     rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
     -- If there's nothing to rummage, we do unary operations
     -- Otherwise we select BinOps or UnOps based on a gene
@@ -414,7 +421,7 @@ instance (Goblin g a, Ord a, AddShrinks a, Typeable a)
 instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, AddShrinks (Map.Map k v),
           AddShrinks k, AddShrinks v, Typeable k, Typeable v)
          => Goblin g (Map.Map k v) where
-    tinker obj = conjureOrSave $ do
+    tinker obj = tinkerRummagedOrConjureOrSave $ do
       rummagedKeys <- (map (sequenceA . map addShrinks)) <$> rummageAll
       rummagedVals <- (map (sequenceA . map addShrinks)) <$> rummageAll
       -- If there's nothing to rummage, we do unary operations
