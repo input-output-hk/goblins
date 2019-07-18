@@ -31,7 +31,6 @@ import           Data.Typeable (Typeable)
 import           Data.TypeRepMap (TypeRepMap)
 import qualified Data.TypeRepMap as TM
 import           Data.Word (Word64)
-import           GHC.Generics
 import           Hedgehog (Gen, MonadGen(..))
 import           Hedgehog.Internal.Gen (GenT(..), mapGenT)
 import           Hedgehog.Internal.Range (Size)
@@ -67,20 +66,8 @@ class (GeneOps g, Typeable a) => Goblin g a where
   -- | Tinker with an item of type 'a'.
   tinker :: Gen a -> TinkerM g (Gen a)
 
-  default tinker
-    :: (Generic a, GGoblin g (Rep a), AddShrinks a, Typeable a)
-    => Gen a
-    -> TinkerM g (Gen a)
-  tinker x = tinkerRummagedOrConjureOrSave $
-     GHC.Generics.to <$$> gTinker (GHC.Generics.from <$> x)
-
   -- | As well as tinkering, goblins can conjure fresh items into existence.
   conjure :: TinkerM g a
-
-  default conjure
-    :: (Generic a, GGoblin g (Rep a), AddShrinks a, Typeable a)
-    => TinkerM g a
-  conjure = saveInBagOfTricks =<< (GHC.Generics.to <$> gConjure)
 
 
 -- | Helper function to save a value in the bagOfTricks, and return it.
@@ -193,57 +180,6 @@ tinkerRummagedOrConjure = do
     Nothing -> addShrinks <$> conjure
     Just  v -> onGene (tinker v) (pure v)
 
---------------------------------------------------------------------------------
--- Generic goblins
---------------------------------------------------------------------------------
-
-class GGoblin g f where
-  gTinker :: Gen (f a) -> TinkerM g (Gen (f a))
-  gConjure :: TinkerM g (f a)
-
--- gRummageOrConjure
---   :: (Generic a, Goblin g a, GGoblin g f, f ~ Rep a)
---   => TinkerM g (f a)
--- gRummageOrConjure = GHC.Generics.from <$> rummageOrConjure
-
-instance GGoblin g V1 where
-  gTinker = return
-  gConjure = error "Cannot conjure a void type"
-
-instance GGoblin g U1 where
-  gTinker = return
-  gConjure = return U1
-
-instance Goblin g c => GGoblin g (K1 i c) where
-  gTinker x = K1 <$$> tinker (unK1 <$> x)
-  gConjure = K1 <$> conjure
-
-instance GGoblin g f => GGoblin g (M1 i t f) where
-  gTinker x = M1 <$$> gTinker (unM1 <$> x)
-  gConjure = M1 <$> gConjure
-
-{-
-
-Can't easily derive Goblin instances for (Gen a) where a is a sum type.
-
--- TODO In the 'tinker' implementations here, we would like to `rummageOrConjure`
--- rather than just conjuring when we switch to the other branch
-instance (GeneOps g, GGoblin g a, GGoblin g b) => GGoblin g (a :+: b) where
-  gTinker (L1 x) = onGene (R1 <$> gConjure) (L1 <$> gTinker x)
-  gTinker (R1 x) = onGene (L1 <$> gConjure) (R1 <$> gTinker x)
-
-  gConjure = onGene (L1 <$> gConjure) (R1 <$> gConjure)
--}
-
-instance (GeneOps g, GGoblin g a, GGoblin g b)
-  => GGoblin g (a :*: b) where
-  gTinker obj =
-    let objA = (\(a :*: _) -> a) <$> obj
-        objB = (\(_ :*: b) -> b) <$> obj
-     in (:*:) <$$> (onGene (gTinker objA) (pure objA))
-              <**> (onGene (gTinker objB) (pure objB))
-  gConjure = liftA2 (:*:) gConjure gConjure
-
 
 --------------------------------------------------------------------------------
 -- Primitive goblins
@@ -300,6 +236,12 @@ applyPruneShrink f x y = f <$> x <*> y
 
 instance (Goblin g a, Goblin g b, AddShrinks a, AddShrinks b)
       => Goblin g (a,b) where
+  tinker p = tinkerRummagedOrConjureOrSave $ do
+    x <- tinker (fst <$> p)
+    y <- tinker (snd <$> p)
+    pure ((,) <$> x <*> y)
+
+  conjure = saveInBagOfTricks =<< (,) <$> conjure <*> conjure
 
 instance (Integral a, Goblin g a, AddShrinks a)
       => Goblin g (Ratio a) where
