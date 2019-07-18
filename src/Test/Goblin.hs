@@ -243,6 +243,17 @@ instance (Goblin g a, Goblin g b, AddShrinks a, AddShrinks b)
 
   conjure = saveInBagOfTricks =<< (,) <$> conjure <*> conjure
 
+instance (Goblin g a, Goblin g b, Goblin g c, AddShrinks a, AddShrinks b, AddShrinks c)
+      => Goblin g (a,b,c) where
+  tinker p = tinkerRummagedOrConjureOrSave $ do
+    x <- tinker ((\(x,_,_) -> x) <$> p)
+    y <- tinker ((\(_,x,_) -> x) <$> p)
+    z <- tinker ((\(_,_,x) -> x) <$> p)
+    pure ((\x y z -> (x,y,z)) <$> x <*> y <*> z)
+
+  conjure = saveInBagOfTricks =<<
+    (\x y z -> (x,y,z)) <$> conjure <*> conjure <*> conjure
+
 instance (Integral a, Goblin g a, AddShrinks a)
       => Goblin g (Ratio a) where
   tinker obj = tinkerRummagedOrConjureOrSave $ do
@@ -458,6 +469,8 @@ instance AddShrinks Natural where
 instance AddShrinks Int where
 instance AddShrinks Word64 where
 instance (AddShrinks a, AddShrinks b) => AddShrinks (a, b) where
+  addShrinks = pure
+instance (AddShrinks a, AddShrinks b, AddShrinks c) => AddShrinks (a, b, c) where
   addShrinks = pure
 instance (AddShrinks k, AddShrinks v) => AddShrinks (Map.Map k v) where
   addShrinks = pure
