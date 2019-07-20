@@ -20,6 +20,7 @@ import qualified Control.Monad.State.Strict as State
 import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.Control (MonadTransControl(..))
 import           Control.Monad.Trans.Maybe (MaybeT)
+import qualified Data.Bimap as Bimap
 import           Data.Char (chr)
 import           Data.Int
 import           Data.List (splitAt)
@@ -30,7 +31,7 @@ import           Data.Ratio (Ratio, (%), numerator, denominator)
 import           Data.Typeable (Typeable)
 import           Data.TypeRepMap (TypeRepMap)
 import qualified Data.TypeRepMap as TM
-import           Data.Word (Word64)
+import           Data.Word (Word8, Word64)
 import           Hedgehog (Gen, MonadGen(..))
 import           Hedgehog.Internal.Gen (GenT(..), mapGenT)
 import           Hedgehog.Internal.Range (Size)
@@ -467,6 +468,7 @@ instance AddShrinks Double where
 instance AddShrinks Integer where
 instance AddShrinks Natural where
 instance AddShrinks Int where
+instance AddShrinks Word8 where
 instance AddShrinks Word64 where
 instance (AddShrinks a, AddShrinks b) => AddShrinks (a, b) where
   addShrinks = pure
@@ -482,6 +484,96 @@ instance AddShrinks a => AddShrinks (Maybe a) where
   addShrinks = pure
 instance AddShrinks a => AddShrinks (Ratio a) where
   addShrinks = pure
+
+
+--------------------------------------------------------------------------------
+-- SeedGoblin class & instances
+--------------------------------------------------------------------------------
+
+class SeedGoblin a where
+  -- | Recur down a type, adding elements to the TypeRepMap
+  seeder :: a -> TinkerM g ()
+
+  default seeder
+    :: (AddShrinks a, Typeable a)
+    => a
+    -> TinkerM g ()
+  seeder x = () <$ saveInBagOfTricks x
+
+instance SeedGoblin Bool where
+instance SeedGoblin Char where
+instance SeedGoblin Integer where
+instance SeedGoblin Natural where
+instance SeedGoblin Int where
+instance SeedGoblin Word8 where
+instance SeedGoblin Word64 where
+instance SeedGoblin Double where
+
+instance (SeedGoblin a, Typeable a) => SeedGoblin [a] where
+  seeder xs = do
+    () <$ saveInBagOfTricks xs
+    () <$ sequenceA (seeder <$> xs)
+instance (SeedGoblin a, Typeable a, SeedGoblin b, Typeable b)
+  => SeedGoblin (Bimap.Bimap a b) where
+  seeder xs = do
+    () <$ saveInBagOfTricks xs
+    () <$ sequenceA (seeder <$> Bimap.keys xs)
+    () <$ sequenceA (seeder <$> Bimap.elems xs)
+instance (SeedGoblin a, Typeable a, SeedGoblin b, Typeable b)
+  => SeedGoblin (Map.Map a b) where
+  seeder xs = do
+    () <$ saveInBagOfTricks xs
+    () <$ sequenceA (seeder <$> Map.keys xs)
+    () <$ sequenceA (seeder <$> Map.elems xs)
+instance (SeedGoblin a, Typeable a) => SeedGoblin (Set.Set a) where
+  seeder xs = do
+    () <$ saveInBagOfTricks xs
+    () <$ sequenceA (seeder <$> Set.toList xs)
+instance (SeedGoblin a, Typeable a, SeedGoblin b, Typeable b)
+  => SeedGoblin (a,b) where
+  seeder a@(x,y) = do
+    () <$ saveInBagOfTricks a
+    () <$ seeder x
+    () <$ seeder y
+instance (SeedGoblin a, Typeable a, SeedGoblin b, Typeable b, SeedGoblin c, Typeable c)
+  => SeedGoblin (a,b,c) where
+  seeder a@(x,y,z) = do
+    () <$ saveInBagOfTricks a
+    () <$ seeder x
+    () <$ seeder y
+    () <$ seeder z
+instance ( SeedGoblin x1, Typeable x1
+         , SeedGoblin x2, Typeable x2
+         , SeedGoblin x3, Typeable x3
+         , SeedGoblin x4, Typeable x4 )
+  => SeedGoblin (x1,x2,x3,x4) where
+  seeder a@(x1,x2,x3,x4) = do
+    () <$ saveInBagOfTricks a
+    () <$ seeder x1
+    () <$ seeder x2
+    () <$ seeder x3
+    () <$ seeder x4
+instance ( SeedGoblin x1, Typeable x1
+         , SeedGoblin x2, Typeable x2
+         , SeedGoblin x3, Typeable x3
+         , SeedGoblin x4, Typeable x4
+         , SeedGoblin x5, Typeable x5
+         , SeedGoblin x6, Typeable x6
+         , SeedGoblin x7, Typeable x7
+         , SeedGoblin x8, Typeable x8
+         , SeedGoblin x9, Typeable x9 )
+  => SeedGoblin (x1,x2,x3,x4,x5,x6,x7,x8,x9) where
+  seeder a@(x1,x2,x3,x4,x5,x6,x7,x8,x9) = do
+    () <$ saveInBagOfTricks a
+    () <$ seeder x1
+    () <$ seeder x2
+    () <$ seeder x3
+    () <$ seeder x4
+    () <$ seeder x5
+    () <$ seeder x6
+    () <$ seeder x7
+    () <$ seeder x8
+    () <$ seeder x9
 
 
 --------------------------------------------------------------------------------
