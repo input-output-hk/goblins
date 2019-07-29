@@ -25,6 +25,7 @@ import           Data.Char (chr)
 import           Data.Int
 import           Data.List (splitAt)
 import qualified Data.List as List
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import           Data.Ratio (Ratio, (%), numerator, denominator)
@@ -255,6 +256,27 @@ instance (Goblin g a, Goblin g b, Goblin g c, AddShrinks a, AddShrinks b, AddShr
   conjure = saveInBagOfTricks =<<
     (\x y z -> (x,y,z)) <$> conjure <*> conjure <*> conjure
 
+instance ( Goblin g x1, AddShrinks x1,
+           Goblin g x2, AddShrinks x2,
+           Goblin g x3, AddShrinks x3,
+           Goblin g x4, AddShrinks x4,
+           Goblin g x5, AddShrinks x5,
+           Goblin g x6, AddShrinks x6)
+      => Goblin g (x1,x2,x3,x4,x5,x6) where
+  tinker gen = tinkerRummagedOrConjureOrSave $
+    (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
+      <$$> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x1) <$> gen))
+      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x2) <$> gen))
+      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x3) <$> gen))
+      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x4) <$> gen))
+      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x5) <$> gen))
+      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x6) <$> gen))
+
+  conjure = saveInBagOfTricks =<<
+    (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
+      <$> conjure <*> conjure <*> conjure
+      <*> conjure <*> conjure <*> conjure
+
 instance (Integral a, Goblin g a, AddShrinks a)
       => Goblin g (Ratio a) where
   tinker obj = tinkerRummagedOrConjureOrSave $ do
@@ -474,6 +496,18 @@ instance (AddShrinks a, AddShrinks b) => AddShrinks (a, b) where
   addShrinks = pure
 instance (AddShrinks a, AddShrinks b, AddShrinks c) => AddShrinks (a, b, c) where
   addShrinks = pure
+instance ( AddShrinks x1, AddShrinks x2
+         , AddShrinks x3, AddShrinks x4
+         , AddShrinks x5, AddShrinks x6 )
+ => AddShrinks (x1,x2,x3,x4,x5,x6) where
+  addShrinks (x1,x2,x3,x4,x5,x6) =
+    (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
+      <$> addShrinks x1
+      <*> addShrinks x2
+      <*> addShrinks x3
+      <*> addShrinks x4
+      <*> addShrinks x5
+      <*> addShrinks x6
 instance (AddShrinks k, AddShrinks v) => AddShrinks (Map.Map k v) where
   addShrinks = pure
 instance AddShrinks a => AddShrinks [a] where
@@ -510,6 +544,10 @@ instance SeedGoblin Word64 where
 instance SeedGoblin Double where
 
 instance (SeedGoblin a, Typeable a) => SeedGoblin [a] where
+  seeder xs = do
+    () <$ saveInBagOfTricks xs
+    () <$ sequenceA (seeder <$> xs)
+instance (SeedGoblin a, Typeable a) => SeedGoblin (Seq.Seq a) where
   seeder xs = do
     () <$ saveInBagOfTricks xs
     () <$ sequenceA (seeder <$> xs)
@@ -553,6 +591,34 @@ instance ( SeedGoblin x1, Typeable x1
     () <$ seeder x2
     () <$ seeder x3
     () <$ seeder x4
+instance ( SeedGoblin x1, Typeable x1
+         , SeedGoblin x2, Typeable x2
+         , SeedGoblin x3, Typeable x3
+         , SeedGoblin x4, Typeable x4
+         , SeedGoblin x5, Typeable x5 )
+  => SeedGoblin (x1,x2,x3,x4,x5) where
+  seeder a@(x1,x2,x3,x4,x5) = do
+    () <$ saveInBagOfTricks a
+    () <$ seeder x1
+    () <$ seeder x2
+    () <$ seeder x3
+    () <$ seeder x4
+    () <$ seeder x5
+instance ( SeedGoblin x1, Typeable x1
+         , SeedGoblin x2, Typeable x2
+         , SeedGoblin x3, Typeable x3
+         , SeedGoblin x4, Typeable x4
+         , SeedGoblin x5, Typeable x5
+         , SeedGoblin x6, Typeable x6 )
+  => SeedGoblin (x1,x2,x3,x4,x5,x6) where
+  seeder a@(x1,x2,x3,x4,x5,x6) = do
+    () <$ saveInBagOfTricks a
+    () <$ seeder x1
+    () <$ seeder x2
+    () <$ seeder x3
+    () <$ seeder x4
+    () <$ seeder x5
+    () <$ seeder x6
 instance ( SeedGoblin x1, Typeable x1
          , SeedGoblin x2, Typeable x2
          , SeedGoblin x3, Typeable x3
