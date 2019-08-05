@@ -6,10 +6,7 @@ module Test.Goblin.Explainer where
 import Test.Goblin
 import Control.Monad.State.Strict (runState)
 import Control.Monad.Trans.Maybe (runMaybeT)
-import Data.Functor.Identity (runIdentity)
 import Data.TreeDiff
-import Data.TreeDiff.Class
-import qualified Data.TypeRepMap as TM
 import Hedgehog
 import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Internal.Gen as IGen
