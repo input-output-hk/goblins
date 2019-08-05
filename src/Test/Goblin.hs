@@ -15,21 +15,14 @@ module Test.Goblin
   , (<**>)
   ) where
 
-import           Control.Applicative (liftA, liftA2)
 import           Control.Arrow (first)
 import           Control.Lens
-import           Control.Monad (liftM, replicateM)
-import           Control.Monad.Morph (MFunctor(..))
+import           Control.Monad (replicateM)
 import           Control.Monad.State.Strict (State)
-import qualified Control.Monad.State.Strict as State
-import           Control.Monad.Trans (lift)
-import           Control.Monad.Trans.Control (MonadTransControl(..))
-import           Control.Monad.Trans.Maybe (MaybeT)
 import qualified Data.Bimap as Bimap
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as BL
 import           Data.Char (chr)
-import           Data.Int
 import           Data.List (splitAt)
 import qualified Data.List as List
 import qualified Data.Sequence as Seq
@@ -40,14 +33,8 @@ import           Data.Typeable (Typeable)
 import           Data.TypeRepMap (TypeRepMap)
 import qualified Data.TypeRepMap as TM
 import           Data.Word (Word8, Word64)
-import           Hedgehog (Gen, MonadGen(..))
-import           Hedgehog.Internal.Gen (GenT(..), mapGenT)
-import           Hedgehog.Internal.Range (Size)
-import           Hedgehog.Internal.Seed (Seed)
-import           Hedgehog.Internal.Tree (Tree, TreeT(..))
+import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
-import           Hedgehog.Internal.Distributive
-  (MonadTransDistributive(..), MonadTransJuggle(..))
 import qualified Hedgehog.Range as Range
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
 import           Moo.GeneticAlgorithm.Types (Genome, Population)
@@ -97,7 +84,7 @@ saveInBagOfTricks x = do
 --   Each 'toy' is a function taking the original value and one grabbed from the
 --   bag of tricks or conjured.
 tinkerWithToys
-  :: (AddShrinks a, Goblin g a, Typeable a, GeneOps g)
+  :: (AddShrinks a, Goblin g a)
   => [Gen a -> Gen a -> Gen a]
   -> (Gen a -> TinkerM g (Gen a))
 tinkerWithToys toys a =
@@ -180,10 +167,10 @@ rummageAll = do
     Just xs -> pure xs
 
 -- | Fetch something from the bag of tricks, or else conjure it up.
-rummageOrConjure :: forall a g . (Typeable a, Goblin g a) => TinkerM g a
+rummageOrConjure :: forall a g . Goblin g a => TinkerM g a
 rummageOrConjure = maybe conjure pure =<< rummage
 
-tinkerRummagedOrConjure :: forall a g . (Typeable a, Goblin g a, AddShrinks a)
+tinkerRummagedOrConjure :: forall a g . (Goblin g a, AddShrinks a)
                         => TinkerM g (Gen a)
 tinkerRummagedOrConjure = do
   mR <- rummage
@@ -197,11 +184,11 @@ tinkerRummagedOrConjure = do
 --------------------------------------------------------------------------------
 
 instance GeneOps a => Goblin a Bool where
-  tinker b = addShrinks <$> onGene rummageOrConjure conjure
+  tinker _ = addShrinks <$> onGene rummageOrConjure conjure
   conjure = saveInBagOfTricks =<< onGene (pure True) (pure False)
 
 instance GeneOps a => Goblin a Char where
-  tinker b = addShrinks <$> onGene rummageOrConjure conjure
+  tinker _ = addShrinks <$> onGene rummageOrConjure conjure
   -- TODO : this uses up 21 bits of genome, and we may not be interested in thorough
   -- coverage of the Char space
   conjure = saveInBagOfTricks =<< chr <$> transcribeGenesAsInt 1114111
@@ -257,10 +244,10 @@ instance (Goblin g a, Goblin g b, AddShrinks a, AddShrinks b)
 instance (Goblin g a, Goblin g b, Goblin g c, AddShrinks a, AddShrinks b, AddShrinks c)
       => Goblin g (a,b,c) where
   tinker p = tinkerRummagedOrConjureOrSave $ do
-    x <- tinker ((\(x,_,_) -> x) <$> p)
-    y <- tinker ((\(_,x,_) -> x) <$> p)
-    z <- tinker ((\(_,_,x) -> x) <$> p)
-    pure ((\x y z -> (x,y,z)) <$> x <*> y <*> z)
+    (\x1 x2 x3 -> (x1, x2, x3))
+      <$$> (tinker ((\(x,_,_) -> x) <$> p))
+      <**> (tinker ((\(_,x,_) -> x) <$> p))
+      <**> (tinker ((\(_,_,x) -> x) <$> p))
 
   conjure = saveInBagOfTricks =<<
     (\x y z -> (x,y,z)) <$> conjure <*> conjure <*> conjure
@@ -274,12 +261,12 @@ instance ( Goblin g x1, AddShrinks x1,
       => Goblin g (x1,x2,x3,x4,x5,x6) where
   tinker gen = tinkerRummagedOrConjureOrSave $
     (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
-      <$$> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x1) <$> gen))
-      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x2) <$> gen))
-      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x3) <$> gen))
-      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x4) <$> gen))
-      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x5) <$> gen))
-      <**> (tinker ((\(x1,x2,x3,x4,x5,x6) -> x6) <$> gen))
+      <$$> (tinker ((\(v,_,_,_,_,_) -> v) <$> gen))
+      <**> (tinker ((\(_,v,_,_,_,_) -> v) <$> gen))
+      <**> (tinker ((\(_,_,v,_,_,_) -> v) <$> gen))
+      <**> (tinker ((\(_,_,_,v,_,_) -> v) <$> gen))
+      <**> (tinker ((\(_,_,_,_,v,_) -> v) <$> gen))
+      <**> (tinker ((\(_,_,_,_,_,v) -> v) <$> gen))
 
   conjure = saveInBagOfTricks =<<
     (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
@@ -339,7 +326,7 @@ instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
       toy obj val
 
     -- Toys for lists can use 'TinkerM', because they might be random
-    binOpToys :: Eq a => [Gen [a] -> Gen [a] -> TinkerM g (Gen [a])]
+    binOpToys :: [Gen [a] -> Gen [a] -> TinkerM g (Gen [a])]
     binOpToys =
       [ \a _ -> pure a
       , \_ b -> pure b
@@ -510,7 +497,7 @@ instance ( AddShrinks x1, AddShrinks x2
          , AddShrinks x5, AddShrinks x6 )
  => AddShrinks (x1,x2,x3,x4,x5,x6) where
   addShrinks (x1,x2,x3,x4,x5,x6) =
-    (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
+    (\v1 v2 v3 v4 v5 v6 -> (v1,v2,v3,v4,v5,v6))
       <$> addShrinks x1
       <*> addShrinks x2
       <*> addShrinks x3
@@ -674,4 +661,4 @@ genPopulation = do
   genomeSize <- Gen.int (Range.linear 0 1000)
   Gen.list (Range.linear 0 300) $ do
     genome <- replicateM genomeSize Gen.bool
-    (,) <$> pure genome <*> Gen.double (Range.constant 0 (10^3))
+    (,) <$> pure genome <*> Gen.double (Range.constant 0 (10.0^^(3::Int)))
