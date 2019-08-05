@@ -7,6 +7,7 @@ import           Data.Word (Word8, Word64)
 import           Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+import qualified System.IO.Temp as Temp
 
 import Test.Goblin
 import Test.Goblin.Util
@@ -35,6 +36,14 @@ prop_PopulationRoundtrip :: Property
 prop_PopulationRoundtrip = property $ do
   pop <- forAll genPopulation
   pop === decodePopulation (encodePopulation pop)
+
+prop_PopulationRoundtripViaFile :: Property
+prop_PopulationRoundtripViaFile = property $ do
+  pop <- forAll genPopulation
+  fp <- evalIO (Temp.emptySystemTempFile "prop_file")
+  () <- evalIO $ writePopulationToFile fp pop
+  pop' <- evalIO $ readPopulationFromFile fp
+  pop === pop'
 
 tests :: Group
 tests = $$(discover)

@@ -662,3 +662,15 @@ genPopulation = do
   Gen.list (Range.linear 0 300) $ do
     genome <- replicateM genomeSize Gen.bool
     (,) <$> pure genome <*> Gen.double (Range.constant 0 (10.0^^(3::Int)))
+
+readFirstGenomeFromFile :: FilePath -> IO [Bool]
+readFirstGenomeFromFile filePath =
+  (fst . head) <$> readPopulationFromFile filePath
+
+readPopulationFromFile :: FilePath -> IO (Population Bool)
+readPopulationFromFile filePath =
+  decodePopulation <$> BL.readFile filePath
+
+writePopulationToFile :: FilePath -> Population Bool -> IO ()
+writePopulationToFile filePath pop =
+  BL.writeFile filePath (encodePopulation pop)
