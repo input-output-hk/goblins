@@ -9,9 +9,14 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Test.Goblin where
+module Test.Goblin 
+  ( module Test.Goblin
+  , (<$$>)
+  , (<**>)
+  ) where
 
 import           Control.Applicative (liftA, liftA2)
+import           Control.Arrow (first)
 import           Control.Lens
 import           Control.Monad (liftM, replicateM)
 import           Control.Monad.Morph (MFunctor(..))
@@ -21,6 +26,8 @@ import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.Control (MonadTransControl(..))
 import           Control.Monad.Trans.Maybe (MaybeT)
 import qualified Data.Bimap as Bimap
+import qualified Data.Binary as Binary
+import qualified Data.ByteString.Lazy as BL
 import           Data.Char (chr)
 import           Data.Int
 import           Data.List (splitAt)
@@ -43,8 +50,10 @@ import           Hedgehog.Internal.Distributive
   (MonadTransDistributive(..), MonadTransJuggle(..))
 import qualified Hedgehog.Range as Range
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
-import           Moo.GeneticAlgorithm.Types (Genome)
+import           Moo.GeneticAlgorithm.Types (Genome, Population)
 import           Numeric.Natural (Natural)
+
+import           Test.Goblin.Util
 
 
 data GoblinData g = GoblinData
@@ -646,10 +655,23 @@ instance ( SeedGoblin x1, Typeable x1
 -- Helpers
 --------------------------------------------------------------------------------
 
-(<$$>) :: (Functor f, Functor g)
-       => (a -> b) -> f (g a) -> f (g b)
-(<$$>) = fmap . fmap
+decodePopulation :: BL.ByteString -> Population Bool
+decodePopulation bs =
+  -- The added Int tells us how much padding we must remove.
+  let intermediate :: [(([Word64],Int),Double)]
+      intermediate = Binary.decode bs
+   in map (first splitter) intermediate
 
-(<**>) :: (Applicative f, Applicative g)
-       => f (g (a -> b)) -> f (g a) -> f (g b)
-(<**>) f x = (\g y -> g <*> y) <$> f <*> x
+encodePopulation :: Population Bool -> BL.ByteString
+encodePopulation pop =
+  -- The added Int tells us how much padding we must remove.
+  let intermediate :: [(([Word64],Int),Double)]
+      intermediate = map (first grouper) pop
+   in Binary.encode intermediate
+
+genPopulation :: Gen (Population Bool)
+genPopulation = do
+  genomeSize <- Gen.int (Range.linear 0 1000)
+  Gen.list (Range.linear 0 300) $ do
+    genome <- replicateM genomeSize Gen.bool
+    (,) <$> pure genome <*> Gen.double (Range.constant 0 (10^3))
