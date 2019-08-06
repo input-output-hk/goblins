@@ -36,7 +36,7 @@ import           Data.Word (Word8, Word64)
 import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-import           Language.Haskell.TH (Q, Exp, listE, runIO)
+import           Language.Haskell.TH (Q, Exp, runIO, stringE)
 import           Language.Haskell.TH.Syntax (addDependentFile)
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
 import           Moo.GeneticAlgorithm.Types (Genome, Population)
@@ -677,10 +677,10 @@ writePopulationToFile :: FilePath -> Population Bool -> IO ()
 writePopulationToFile filePath pop =
   BL.writeFile filePath (encodePopulation pop)
 
-loadTHFirstGenome :: FilePath -> Q Exp
-loadTHFirstGenome fp = do
+loadBestPopToShownByteString :: FilePath -> Q Exp
+loadBestPopToShownByteString fp = do
   addDependentFile fp
-  listE . (boolify <$>) =<< (runIO (readFirstGenomeFromFile fp))
- where
-  boolify True  = [|True |]
-  boolify False = [|False|]
+  stringE . show =<< (runIO $ do
+    bs <- BL.readFile fp
+    let best = head (decodePopulation bs)
+    pure (encodePopulation [best]))
