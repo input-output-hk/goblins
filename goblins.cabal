@@ -40,6 +40,7 @@ library
                      , moo
                      , mtl
                      , random
+                     , template-haskell
                      , transformers
                      , tree-diff
                      , typerep-map

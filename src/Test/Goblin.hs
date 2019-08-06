@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Test.Goblin 
+module Test.Goblin
   ( module Test.Goblin
   , (<$$>)
   , (<**>)
@@ -36,6 +36,8 @@ import           Data.Word (Word8, Word64)
 import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+import           Language.Haskell.TH (Q, Exp, listE, runIO)
+import           Language.Haskell.TH.Syntax (addDependentFile)
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
 import           Moo.GeneticAlgorithm.Types (Genome, Population)
 import           Numeric.Natural (Natural)
@@ -674,3 +676,11 @@ readPopulationFromFile filePath =
 writePopulationToFile :: FilePath -> Population Bool -> IO ()
 writePopulationToFile filePath pop =
   BL.writeFile filePath (encodePopulation pop)
+
+loadTHFirstGenome :: FilePath -> Q Exp
+loadTHFirstGenome fp = do
+  addDependentFile fp
+  listE . (boolify <$>) =<< (runIO (readFirstGenomeFromFile fp))
+ where
+  boolify True  = [|True |]
+  boolify False = [|False|]
