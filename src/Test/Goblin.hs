@@ -684,3 +684,14 @@ loadBestPopToShownByteString fp = do
     bs <- BL.readFile fp
     let best = head (decodePopulation bs)
     pure (encodePopulation [best]))
+
+seedAndTinkerGenWithGenomeFromFile :: FilePath -> Q Exp -> Q Exp
+seedAndTinkerGenWithGenomeFromFile fp validGen = [|
+  let popStr = $(loadBestPopToShownByteString fp)
+      genome = case decodePopulation (read popStr) of
+                 [] -> error "sigGenChain: impossible"
+                 (x,_):_ -> x
+      gd = mkEmptyGoblin genome
+      action = seeder env >> seeder state >> tinker $(validGen)
+   in evalState action gd
+   |]
