@@ -4,7 +4,7 @@
 module Test.Goblin.Explainer where
 
 import Test.Goblin
-import Control.Monad.State.Strict (runState)
+import Control.Monad.Trans.State.Strict (runState)
 import Control.Monad.Trans.Maybe (runMaybeT)
 import Data.TreeDiff
 import Hedgehog
