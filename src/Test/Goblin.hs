@@ -18,7 +18,7 @@ module Test.Goblin
 import           Control.Arrow (first)
 import           Control.Lens
 import           Control.Monad (replicateM)
-import           Control.Monad.State.Strict (State)
+import           Control.Monad.Trans.State.Strict (State)
 import qualified Data.Bimap as Bimap
 import qualified Data.Binary as Binary
 import qualified Data.ByteString.Lazy as BL
