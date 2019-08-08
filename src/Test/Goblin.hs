@@ -482,6 +482,7 @@ class AddShrinks a where
   -- TODO: add shrink tree
   addShrinks = pure
 
+instance AddShrinks () where
 instance AddShrinks Bool where
 instance AddShrinks Char where
 instance AddShrinks Double where
@@ -532,6 +533,7 @@ class SeedGoblin a where
     -> TinkerM g ()
   seeder x = () <$ saveInBagOfTricks x
 
+instance SeedGoblin () where
 instance SeedGoblin Bool where
 instance SeedGoblin Char where
 instance SeedGoblin Integer where
