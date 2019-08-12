@@ -23,7 +23,10 @@ flag development
 
 library
   exposed-modules:     Test.Goblin
+                       Test.Goblin.Core
                        Test.Goblin.Explainer
+                       Test.Goblin.Instances
+                       Test.Goblin.TH
                        Test.Goblin.Util
   -- other-modules:
   -- other-extensions:
@@ -40,6 +43,7 @@ library
                      , moo
                      , random
                      , template-haskell
+                     , th-utilities
                      , transformers
                      , tree-diff
                      , typerep-map

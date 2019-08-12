@@ -3,7 +3,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Test.Goblin.Explainer where
 
-import Test.Goblin
 import Control.Monad.Trans.State.Strict (runState)
 import Control.Monad.Trans.Maybe (runMaybeT)
 import Data.TreeDiff
@@ -12,6 +11,9 @@ import qualified Hedgehog.Range as Range
 import qualified Hedgehog.Internal.Gen as IGen
 import qualified Hedgehog.Internal.Tree as ITree
 import           Moo.GeneticAlgorithm.Types (Population)
+
+import Test.Goblin.Core
+
 
 explainGoblin
   :: (Goblin Bool s, ToExpr s)
