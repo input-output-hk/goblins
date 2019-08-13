@@ -2,6 +2,7 @@
 module Test.Goblin.TH where
 
 import           Control.Monad (foldM, forM, unless)
+import           Data.Typeable (Typeable)
 import           Language.Haskell.TH
 import           TH.ReifySimple
 
@@ -112,6 +113,51 @@ deriveAddShrinks name = do
                   start
                   (tail (fieldNames))
     pure (FunD (mkName "addShrinks") [Clause [pat] (NormalB body) []])
+
+
+--------------------------------------------------------------------------------
+-- SeedGoblin instance derivation
+--------------------------------------------------------------------------------
+
+deriveSeedGoblin :: Name -> Q [Dec]
+deriveSeedGoblin name = do
+  (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
+  classParamNames <- forM dTyVars (const (newName "arg"))
+  let con = ensureSingleton dCons
+  ctx <- wrapWithConstraints classParamNames
+  decTy <- makeInstanceType classParamNames
+  sdr <- makeSeeder con
+  pure [InstanceD Nothing ctx decTy [sdr]]
+ where
+  ensureSingleton dCons =
+    case dCons of
+      []  -> error "deriveSeedGoblin: cannot derive SeedGoblin for a void type"
+      [x] -> x
+      _   -> error "deriveSeedGoblin: cannot derive SeedGoblin for a sum type"
+
+  -- Create constraints `(SeedGoblin a ...) => ...` for the instance
+  wrapWithConstraints = sequence .
+    concatMap (\cpn -> [ [t| SeedGoblin $(pure (VarT cpn)) |]
+                       , [t| Typeable $(pure (VarT cpn)) |]
+                       ])
+
+
+  -- Make instance type `... => SeedGoblin (Foo a b ...)`
+  makeInstanceType classParamNames =
+    [t| SeedGoblin
+          ( $(pure (foldl wrapTyVars (ConT name) classParamNames)) ) |]
+  wrapTyVars acc cpn = AppT acc (VarT cpn)
+
+  makeSeeder con = do
+    asName <- newName "argAs"
+    fieldNames <- forM (dcFields con) (const (newName "field"))
+    let pat = AsP asName (ConP (dcName con) (map VarP fieldNames))
+
+    seedAs <- [| () <$ saveInBagOfTricks $(pure (VarE asName)) |]
+    seedRest <- forM fieldNames $ \vName -> do
+                  [| seeder $(pure (VarE vName)) |]
+    let stmts = map NoBindS (seedAs:seedRest)
+    pure (FunD (mkName "seeder") [Clause [pat] (NormalB (DoE stmts)) []])
 
 
 --------------------------------------------------------------------------------
