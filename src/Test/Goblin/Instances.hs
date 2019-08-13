@@ -14,7 +14,7 @@ import           Data.Char (chr)
 import           Data.List (splitAt)
 import qualified Data.List as List
 import qualified Data.Map as Map
-import           Data.Ratio (Ratio, (%), numerator, denominator)
+import           Data.Ratio (Ratio)
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import           Data.Typeable (Typeable)
@@ -25,6 +25,7 @@ import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
 import           Numeric.Natural (Natural)
 
 import Test.Goblin.Core
+import Test.Goblin.TH
 
 
 instance GeneOps Bool where
@@ -89,57 +90,10 @@ instance GeneOps a => Goblin a Double where
 -- Composite goblins
 --------------------------------------------------------------------------------
 
--- deriveGoblin '(,)
-
-instance (Goblin g a, Goblin g b, AddShrinks a, AddShrinks b)
-      => Goblin g (a,b) where
-  tinker p = tinkerRummagedOrConjureOrSave $ do
-    x <- tinker (fst <$> p)
-    y <- tinker (snd <$> p)
-    pure ((,) <$> x <*> y)
-
-  conjure = saveInBagOfTricks =<< (,) <$> conjure <*> conjure
-
-instance (Goblin g a, Goblin g b, Goblin g c, AddShrinks a, AddShrinks b, AddShrinks c)
-      => Goblin g (a,b,c) where
-  tinker p = tinkerRummagedOrConjureOrSave $ do
-    (\x1 x2 x3 -> (x1, x2, x3))
-      <$$> (tinker ((\(x,_,_) -> x) <$> p))
-      <**> (tinker ((\(_,x,_) -> x) <$> p))
-      <**> (tinker ((\(_,_,x) -> x) <$> p))
-
-  conjure = saveInBagOfTricks =<<
-    (\x y z -> (x,y,z)) <$> conjure <*> conjure <*> conjure
-
-instance ( Goblin g x1, AddShrinks x1,
-           Goblin g x2, AddShrinks x2,
-           Goblin g x3, AddShrinks x3,
-           Goblin g x4, AddShrinks x4,
-           Goblin g x5, AddShrinks x5,
-           Goblin g x6, AddShrinks x6)
-      => Goblin g (x1,x2,x3,x4,x5,x6) where
-  tinker gen = tinkerRummagedOrConjureOrSave $
-    (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
-      <$$> (tinker ((\(v,_,_,_,_,_) -> v) <$> gen))
-      <**> (tinker ((\(_,v,_,_,_,_) -> v) <$> gen))
-      <**> (tinker ((\(_,_,v,_,_,_) -> v) <$> gen))
-      <**> (tinker ((\(_,_,_,v,_,_) -> v) <$> gen))
-      <**> (tinker ((\(_,_,_,_,v,_) -> v) <$> gen))
-      <**> (tinker ((\(_,_,_,_,_,v) -> v) <$> gen))
-
-  conjure = saveInBagOfTricks =<<
-    (\x1 x2 x3 x4 x5 x6 -> (x1,x2,x3,x4,x5,x6))
-      <$> conjure <*> conjure <*> conjure
-      <*> conjure <*> conjure <*> conjure
-
-instance (Integral a, Goblin g a, AddShrinks a)
-      => Goblin g (Ratio a) where
-  tinker obj = tinkerRummagedOrConjureOrSave $ do
-    n <- tinker (numerator <$> obj)
-    d <- tinker (denominator <$> obj)
-    pure ((%) <$> n <*> d)
-
-  conjure = saveInBagOfTricks =<< (%) <$> conjure <*> conjure
+deriveGoblin ''(,)
+deriveGoblin ''(,,)
+deriveGoblin ''(,,,,,)
+deriveGoblin ''Ratio
 
 instance (Goblin g a, AddShrinks a)
       => Goblin g (Maybe a) where
