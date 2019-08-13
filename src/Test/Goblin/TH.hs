@@ -8,6 +8,10 @@ import           TH.ReifySimple
 import Test.Goblin.Core
 
 
+--------------------------------------------------------------------------------
+-- Goblin instance derivation
+--------------------------------------------------------------------------------
+
 deriveGoblin :: Name -> Q [Dec]
 deriveGoblin name = do
   (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
@@ -68,6 +72,52 @@ deriveGoblin name = do
     pure (FunD (mkName "conjure") [Clause [] (NormalB cb) []])
 
 
+--------------------------------------------------------------------------------
+-- AddShrinks instance derivation
+--------------------------------------------------------------------------------
+
+deriveAddShrinks :: Name -> Q [Dec]
+deriveAddShrinks name = do
+  (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
+  classParamNames <- forM dTyVars (const (newName "arg"))
+  let con = ensureSingleton dCons
+  ctx <- wrapWithConstraints classParamNames
+  decTy <- makeInstanceType classParamNames
+  addShr <- makeAddShrinks con
+  pure [InstanceD Nothing ctx decTy [addShr]]
+ where
+  ensureSingleton dCons =
+    case dCons of
+      []  -> error "deriveAddShrinks: cannot derive AddShrinks for a void type"
+      [x] -> x
+      _   -> error "deriveAddShrinks: cannot derive AddShrinks for a sum type"
+
+  -- Create constraints `(AddShrinks a ...) => ...` for the instance
+  wrapWithConstraints = sequence .
+    map (\cpn -> [t| AddShrinks $(pure (VarT cpn)) |])
+
+  -- Make instance type `... => AddShrinks (Foo a b ...)`
+  makeInstanceType classParamNames =
+    [t| AddShrinks
+          ( $(pure (foldl wrapTyVars (ConT name) classParamNames)) ) |]
+  wrapTyVars acc cpn = AppT acc (VarT cpn)
+
+  makeAddShrinks con = do
+    fieldNames <- forM (dcFields con) (const (newName "field"))
+    let pat = ConP (dcName con) (map VarP fieldNames)
+
+    start <- [| $(pure (makeConPacker (dcName con) fieldNames))
+                  <$> addShrinks $(pure (VarE (head fieldNames))) |]
+    body <- foldM (\acc v -> [| $(pure acc) <*> addShrinks $(pure (VarE v)) |])
+                  start
+                  (tail (fieldNames))
+    pure (FunD (mkName "addShrinks") [Clause [pat] (NormalB body) []])
+
+
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
+
 -- Take a constructor name and a list of arguments, and return a lambda
 -- which receives the arguments and packs them into the constructor.
 makeConPacker :: Name -> [Name] -> Exp
@@ -76,7 +126,6 @@ makeConPacker conName argNames =
                    (ConE conName)
                    argNames
    in LamE (map VarP argNames) body
-
 
 -- Take a constructor name and a list of arguments, and return a list
 -- of lambdas which access each respective constructor field, in order.
