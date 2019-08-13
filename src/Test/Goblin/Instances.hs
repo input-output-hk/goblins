@@ -305,6 +305,17 @@ instance SeedGoblin Word8 where
 instance SeedGoblin Word64 where
 instance SeedGoblin Double where
 
+deriveSeedGoblin ''(,)
+deriveSeedGoblin ''(,,)
+deriveSeedGoblin ''(,,,)
+deriveSeedGoblin ''(,,,,)
+deriveSeedGoblin ''(,,,,,)
+deriveSeedGoblin ''(,,,,,,)
+deriveSeedGoblin ''(,,,,,,,)
+deriveSeedGoblin ''(,,,,,,,,)
+deriveSeedGoblin ''(,,,,,,,,,)
+deriveSeedGoblin ''(,,,,,,,,,,)
+
 instance (SeedGoblin a, Typeable a) => SeedGoblin [a] where
   seeder xs = do
     () <$ saveInBagOfTricks xs
@@ -329,77 +340,3 @@ instance (SeedGoblin a, Typeable a) => SeedGoblin (Set.Set a) where
   seeder xs = do
     () <$ saveInBagOfTricks xs
     () <$ sequenceA (seeder <$> Set.toList xs)
-instance (SeedGoblin a, Typeable a, SeedGoblin b, Typeable b)
-  => SeedGoblin (a,b) where
-  seeder a@(x,y) = do
-    () <$ saveInBagOfTricks a
-    () <$ seeder x
-    () <$ seeder y
-instance (SeedGoblin a, Typeable a, SeedGoblin b, Typeable b, SeedGoblin c, Typeable c)
-  => SeedGoblin (a,b,c) where
-  seeder a@(x,y,z) = do
-    () <$ saveInBagOfTricks a
-    () <$ seeder x
-    () <$ seeder y
-    () <$ seeder z
-instance ( SeedGoblin x1, Typeable x1
-         , SeedGoblin x2, Typeable x2
-         , SeedGoblin x3, Typeable x3
-         , SeedGoblin x4, Typeable x4 )
-  => SeedGoblin (x1,x2,x3,x4) where
-  seeder a@(x1,x2,x3,x4) = do
-    () <$ saveInBagOfTricks a
-    () <$ seeder x1
-    () <$ seeder x2
-    () <$ seeder x3
-    () <$ seeder x4
-instance ( SeedGoblin x1, Typeable x1
-         , SeedGoblin x2, Typeable x2
-         , SeedGoblin x3, Typeable x3
-         , SeedGoblin x4, Typeable x4
-         , SeedGoblin x5, Typeable x5 )
-  => SeedGoblin (x1,x2,x3,x4,x5) where
-  seeder a@(x1,x2,x3,x4,x5) = do
-    () <$ saveInBagOfTricks a
-    () <$ seeder x1
-    () <$ seeder x2
-    () <$ seeder x3
-    () <$ seeder x4
-    () <$ seeder x5
-instance ( SeedGoblin x1, Typeable x1
-         , SeedGoblin x2, Typeable x2
-         , SeedGoblin x3, Typeable x3
-         , SeedGoblin x4, Typeable x4
-         , SeedGoblin x5, Typeable x5
-         , SeedGoblin x6, Typeable x6 )
-  => SeedGoblin (x1,x2,x3,x4,x5,x6) where
-  seeder a@(x1,x2,x3,x4,x5,x6) = do
-    () <$ saveInBagOfTricks a
-    () <$ seeder x1
-    () <$ seeder x2
-    () <$ seeder x3
-    () <$ seeder x4
-    () <$ seeder x5
-    () <$ seeder x6
-instance ( SeedGoblin x1, Typeable x1
-         , SeedGoblin x2, Typeable x2
-         , SeedGoblin x3, Typeable x3
-         , SeedGoblin x4, Typeable x4
-         , SeedGoblin x5, Typeable x5
-         , SeedGoblin x6, Typeable x6
-         , SeedGoblin x7, Typeable x7
-         , SeedGoblin x8, Typeable x8
-         , SeedGoblin x9, Typeable x9 )
-  => SeedGoblin (x1,x2,x3,x4,x5,x6,x7,x8,x9) where
-  seeder a@(x1,x2,x3,x4,x5,x6,x7,x8,x9) = do
-    () <$ saveInBagOfTricks a
-    () <$ seeder x1
-    () <$ seeder x2
-    () <$ seeder x3
-    () <$ seeder x4
-    () <$ seeder x5
-    () <$ seeder x6
-    () <$ seeder x7
-    () <$ seeder x8
-    () <$ seeder x9
-
