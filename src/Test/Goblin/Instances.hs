@@ -270,32 +270,26 @@ instance AddShrinks Natural where
 instance AddShrinks Int where
 instance AddShrinks Word8 where
 instance AddShrinks Word64 where
-instance (AddShrinks a, AddShrinks b) => AddShrinks (a, b) where
-  addShrinks = pure
-instance (AddShrinks a, AddShrinks b, AddShrinks c) => AddShrinks (a, b, c) where
-  addShrinks = pure
-instance ( AddShrinks x1, AddShrinks x2
-         , AddShrinks x3, AddShrinks x4
-         , AddShrinks x5, AddShrinks x6 )
- => AddShrinks (x1,x2,x3,x4,x5,x6) where
-  addShrinks (x1,x2,x3,x4,x5,x6) =
-    (\v1 v2 v3 v4 v5 v6 -> (v1,v2,v3,v4,v5,v6))
-      <$> addShrinks x1
-      <*> addShrinks x2
-      <*> addShrinks x3
-      <*> addShrinks x4
-      <*> addShrinks x5
-      <*> addShrinks x6
-instance (AddShrinks k, AddShrinks v) => AddShrinks (Map.Map k v) where
-  addShrinks = pure
+
+deriveAddShrinks ''(,)
+deriveAddShrinks ''(,,)
+deriveAddShrinks ''(,,,)
+deriveAddShrinks ''(,,,,)
+deriveAddShrinks ''(,,,,,)
+deriveAddShrinks ''Ratio
+
+instance (AddShrinks k, Ord k, AddShrinks v) => AddShrinks (Map.Map k v) where
+  addShrinks xs = Map.fromList <$> mapM addShrinks (Map.toList xs)
+
 instance AddShrinks a => AddShrinks [a] where
-  addShrinks = pure
-instance AddShrinks a => AddShrinks (Set.Set a) where
-  addShrinks = pure
+  addShrinks ls = mapM addShrinks ls
+
+instance (AddShrinks a, Ord a) => AddShrinks (Set.Set a) where
+  addShrinks xs = Set.fromList <$> mapM addShrinks (Set.toList xs)
+
 instance AddShrinks a => AddShrinks (Maybe a) where
-  addShrinks = pure
-instance AddShrinks a => AddShrinks (Ratio a) where
-  addShrinks = pure
+  addShrinks Nothing  = pure Nothing
+  addShrinks (Just x) = Just <$> addShrinks x
 
 --------------------------------------------------------------------------------
 -- SeedGoblin
