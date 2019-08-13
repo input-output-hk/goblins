@@ -92,7 +92,14 @@ instance GeneOps a => Goblin a Double where
 
 deriveGoblin ''(,)
 deriveGoblin ''(,,)
+deriveGoblin ''(,,,)
+deriveGoblin ''(,,,,)
 deriveGoblin ''(,,,,,)
+deriveGoblin ''(,,,,,,)
+deriveGoblin ''(,,,,,,,)
+deriveGoblin ''(,,,,,,,,)
+deriveGoblin ''(,,,,,,,,,)
+deriveGoblin ''(,,,,,,,,,,)
 deriveGoblin ''Ratio
 
 instance (Goblin g a, AddShrinks a)
@@ -276,6 +283,11 @@ deriveAddShrinks ''(,,)
 deriveAddShrinks ''(,,,)
 deriveAddShrinks ''(,,,,)
 deriveAddShrinks ''(,,,,,)
+deriveAddShrinks ''(,,,,,,)
+deriveAddShrinks ''(,,,,,,,)
+deriveAddShrinks ''(,,,,,,,,)
+deriveAddShrinks ''(,,,,,,,,,)
+deriveAddShrinks ''(,,,,,,,,,,)
 deriveAddShrinks ''Ratio
 
 instance (AddShrinks k, Ord k, AddShrinks v) => AddShrinks (Map.Map k v) where
