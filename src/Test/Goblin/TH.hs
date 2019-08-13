@@ -19,7 +19,9 @@ deriveGoblin name = do
   genomeVar <- VarT <$> newName "genome"
   classParamNames <- forM dTyVars (const (newName "arg"))
   let con = ensureSingleton dCons
-  ctx <- wrapWithGoblinConstraints genomeVar classParamNames
+  ctx <- if null classParamNames
+            then (:[]) <$> [t| GeneOps $(pure genomeVar) |]
+            else wrapWithGoblinConstraints genomeVar classParamNames
   decTy <- makeInstanceType genomeVar classParamNames
   tink <- makeTinker con
   conj <- makeConjure con
