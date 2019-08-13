@@ -46,6 +46,8 @@ deriveGoblin name = do
   wrapTyVars acc cpn = AppT acc (VarT cpn)
 
   makeTinker con = do
+    unless (length (dcFields con) > 0) $
+      error "not enough fields"
     argName <- newName "arg"
     let pat = VarP argName
     body <- mkBody argName
@@ -106,6 +108,8 @@ deriveAddShrinks name = do
   wrapTyVars acc cpn = AppT acc (VarT cpn)
 
   makeAddShrinks con = do
+    unless (length (dcFields con) > 0) $
+      error "not enough fields"
     fieldNames <- forM (dcFields con) (const (newName "field"))
     let pat = ConP (dcName con) (map VarP fieldNames)
 
