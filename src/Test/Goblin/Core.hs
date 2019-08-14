@@ -267,13 +267,12 @@ loadBestPopToShownByteString fp = do
     let best = head (decodePopulation bs)
     pure (encodePopulation [best]))
 
-seedAndTinkerGenWithGenomeFromFile :: FilePath -> Q Exp -> Q Exp
-seedAndTinkerGenWithGenomeFromFile fp validGen = [|
+loadGoblinDataFromFilePath :: FilePath
+                           -> Q Exp
+loadGoblinDataFromFilePath fp = [|
   let popStr = $(loadBestPopToShownByteString fp)
       genome = case decodePopulation (read popStr) of
                  [] -> error "sigGenChain: impossible"
                  (x,_):_ -> x
-      gd = mkEmptyGoblin genome
-      action = seeder env >> seeder state >> tinker $(validGen)
-   in evalState action gd
+   in mkEmptyGoblin genome
    |]
