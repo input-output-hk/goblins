@@ -1,3 +1,4 @@
+-- | The top-level module of Goblins, which re-exports the main functionality.
 module Test.Goblin
   ( module Test.Goblin.Core
   , module Test.Goblin.Explainer

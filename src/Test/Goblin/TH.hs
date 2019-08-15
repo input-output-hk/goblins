@@ -1,5 +1,11 @@
-{-# LANGUAGE TemplateHaskell       #-}
-module Test.Goblin.TH where
+{-# LANGUAGE TemplateHaskell #-}
+
+-- | Template Haskell derivation functions for the goblin-related typeclasses.
+module Test.Goblin.TH
+  ( deriveGoblin
+  , deriveAddShrinks
+  , deriveSeedGoblin
+  ) where
 
 import           Control.Monad (foldM, forM)
 import           Data.Typeable (Typeable)
@@ -13,6 +19,27 @@ import Test.Goblin.Core
 -- Goblin instance derivation
 --------------------------------------------------------------------------------
 
+-- | Derive a `Goblin` instance for datatypes which have `Goblin` and `AddShrinks`
+-- instances for their enclosed fields.
+-- `tinker`s recursively with fields of a datatype, then uses `<$$>` and `<**>`
+-- to map the constructor over the tinkered fields.
+-- `conjure`s by using `<$>` and `<*>` over recursive calls to `conjure`.
+--
+-- @
+--   deriveGoblin ''(,)
+--   ======>
+--   instance (Goblin g a,
+--             AddShrinks a,
+--             Goblin g b,
+--             AddShrinks b) =>
+--            Goblin g ((,) a b) where
+--     tinker gen
+--       = tinkerRummagedOrConjureOrSave
+--           (((\ a b -> ((,) a) b)
+--              <$$> tinker ((\ ((,) a _) -> a) <$> gen))
+--              <**> tinker ((\ ((,) _ b) -> b) <$> gen))
+--     conjure = (saveInBagOfTricks =<< (((,) <$> conjure) <*> conjure))
+-- @
 deriveGoblin :: Name -> Q [Dec]
 deriveGoblin name = do
   (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
@@ -61,8 +88,9 @@ deriveGoblin name = do
                     <$$> (tinker ($(pure (head accessors))
                             <$> $(pure (VarE argName)))) |]
       let tinkerBody =
-            foldM (\acc getter -> [| $(pure acc) <**> (tinker ($(pure getter)
-                                                   <$> $(pure (VarE argName)))) |])
+            foldM (\acc getter -> [| $(pure acc)
+                                       <**> (tinker ($(pure getter)
+                                              <$> $(pure (VarE argName)))) |])
                   start
                   (tail accessors)
       [| tinkerRummagedOrConjureOrSave $(tinkerBody) |]
@@ -87,6 +115,21 @@ deriveGoblin name = do
 -- AddShrinks instance derivation
 --------------------------------------------------------------------------------
 
+-- | Derive an `AddShrinks` instance for datatypes which have `AddShrinks`
+-- instances for their enclosed fields. Simply performs structural recursion
+-- on fields, then uses `<$>` and `<*>` to apply the constructor over the
+-- `addShrinks` of the fields.
+--
+-- @
+--   deriveAddShrinks ''(,)
+--   ======>
+--   instance (AddShrinks a, AddShrinks b) =>
+--            AddShrinks ((,) a b) where
+--     addShrinks ((,) x y)
+--       = (((\ x y -> ((,) x) y)
+--            <$> addShrinks x)
+--            <*> addShrinks y)
+-- @
 deriveAddShrinks :: Name -> Q [Dec]
 deriveAddShrinks name = do
   (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
@@ -132,6 +175,22 @@ deriveAddShrinks name = do
 -- SeedGoblin instance derivation
 --------------------------------------------------------------------------------
 
+-- | Derive a `SeedGoblin` instance which calls `saveInBagOfTricks` on the
+-- argument then recurs structurally on fields.
+--
+-- @
+--   deriveSeedGoblin ''(,)
+--   ======>
+--   instance (SeedGoblin a,
+--             Typeable a,
+--             SeedGoblin b,
+--             Typeable b) =>
+--            SeedGoblin ((,) a b) where
+--     seeder p@((,) x y)
+--       = do (() <$ saveInBagOfTricks p)
+--            seeder x
+--            seeder y
+-- @
 deriveSeedGoblin :: Name -> Q [Dec]
 deriveSeedGoblin name = do
   (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
@@ -177,7 +236,7 @@ deriveSeedGoblin name = do
 -- Helpers
 --------------------------------------------------------------------------------
 
--- Take a constructor name and a list of arguments, and return a lambda
+-- | Take a constructor name and a list of arguments, and return a lambda
 -- which receives the arguments and packs them into the constructor.
 makeConPacker :: Name -> [Name] -> Exp
 makeConPacker conName argNames =
@@ -186,7 +245,7 @@ makeConPacker conName argNames =
                    argNames
    in LamE (map VarP argNames) body
 
--- Take a constructor name and a list of arguments, and return a list
+-- | Take a constructor name and a list of arguments, and return a list
 -- of lambdas which access each respective constructor field, in order.
 makeAccessors :: Name -> [Name] -> [Exp]
 makeAccessors conName argNames =

@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+-- | The core typeclasses and associated methods of goblins.
 module Test.Goblin.Core
   ( module Test.Goblin.Core
   , (<$$>)
@@ -27,6 +28,7 @@ import           Moo.GeneticAlgorithm.Types (Genome, Population)
 import           Test.Goblin.Util
 
 
+-- | The state we carry as we perform goblins actions.
 data GoblinData g = GoblinData
   { -- | Remaining genes, controlling how a goblin operates.
     _genes       :: !(Genome g)
@@ -44,6 +46,9 @@ makeLenses 'GoblinData
 type TinkerM g = State (GoblinData g)
 
 
+-- | The interface to goblins. This class defines two actions
+--   - `tinker`ing with an existing value
+--   - `conjure`ing a new value
 class (GeneOps g, Typeable a) => Goblin g a where
   -- | Tinker with an item of type 'a'.
   tinker :: Gen a -> TinkerM g (Gen a)
@@ -79,6 +84,8 @@ tinkerWithToys toys a =
     toy <- (allToys !!) <$> geneListIndex allToys
     toy a <$> tinkerRummagedOrConjure
 
+-- | Either tinker with a rummaged value, conjure a new value, or save the
+-- argument in the bagOfTricks and return it.
 tinkerRummagedOrConjureOrSave :: (Goblin g a, AddShrinks a)
                               => TinkerM g (Gen a) -> TinkerM g (Gen a)
 tinkerRummagedOrConjureOrSave m =
@@ -99,6 +106,7 @@ transcribeGene = do
       genes .= xs
       return x
 
+-- | A typeclass for actions over genomes.
 class GeneOps g where
   -- | Choose between two actions based on the value of a gene.
   onGene
@@ -141,6 +149,9 @@ rummageAll = do
 rummageOrConjure :: forall a g . Goblin g a => TinkerM g a
 rummageOrConjure = maybe conjure pure =<< rummage
 
+-- | Attempt to rummage. If a value is available, either tinker with it or
+-- leave it intact. If no value is available, conjure a fresh one and add
+-- shrinks to it.
 tinkerRummagedOrConjure :: forall a g . (Goblin g a, AddShrinks a)
                         => TinkerM g (Gen a)
 tinkerRummagedOrConjure = do
@@ -151,17 +162,12 @@ tinkerRummagedOrConjure = do
 
 
 --------------------------------------------------------------------------------
--- Training goblins
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
 -- AddShrinks class
 --------------------------------------------------------------------------------
 
+-- | Whereas `pure` creates a Hedgehog tree with no shrinks, `addShrinks`
+--   creates a tree with shrinks.
 class AddShrinks a where
-  -- | Whereas `pure` creates a Hedgehog tree with no shrinks, `addShrinks`
-  --   creates a tree with shrinks.
   addShrinks :: a -> Gen a
   default addShrinks
     :: Enum a
@@ -169,6 +175,8 @@ class AddShrinks a where
     -> Gen a
   addShrinks = Gen.shrink shrinkEnum . pure
 
+-- | Use an Enum instance to create a shrink tree which shrinks towards
+-- `toEnum 0`.
 shrinkEnum :: Enum a => a -> [a]
 shrinkEnum x = toEnum <$>
   if e == 0
@@ -184,6 +192,7 @@ shrinkEnum x = toEnum <$>
 -- SeedGoblin class
 --------------------------------------------------------------------------------
 
+-- | Recur down a datatype, adding the sub-datatypes to the `TinkerM` `TypeRepMap`
 class SeedGoblin a where
   -- | Recur down a type, adding elements to the TypeRepMap
   seeder :: a -> TinkerM g ()

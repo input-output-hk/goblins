@@ -1,5 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell       #-}
+
+-- | Utilities for reading from / writing to the filesystem
 module Test.Goblin.Persist where
 
 import           Control.Arrow (first)
@@ -12,10 +14,6 @@ import           Language.Haskell.TH (Q, Exp, runIO, stringE)
 import           Language.Haskell.TH.Syntax (addDependentFile)
 import           Moo.GeneticAlgorithm.Types (Population)
 
-
---------------------------------------------------------------------------------
--- Utilities for reading from / writing to the filesystem
---------------------------------------------------------------------------------
 
 -- | Decode a `Population Bool` from a lazy ByteString.
 decodePopulation :: BL.ByteString -> Population Bool
@@ -33,18 +31,24 @@ encodePopulation pop =
       intermediate = map (first grouper) pop
    in Binary.encode intermediate
 
+-- | Load a Population from a file and return the first (highest
+-- scoring) genome.
 readFirstGenomeFromFile :: FilePath -> IO [Bool]
 readFirstGenomeFromFile filePath =
   (fst . head) <$> readPopulationFromFile filePath
 
+-- | Read a Population from a file.
 readPopulationFromFile :: FilePath -> IO (Population Bool)
 readPopulationFromFile filePath =
   decodePopulation <$> BL.readFile filePath
 
+-- | Write a Population to a file.
 writePopulationToFile :: FilePath -> Population Bool -> IO ()
 writePopulationToFile filePath pop =
   BL.writeFile filePath (encodePopulation pop)
 
+-- | Read a file at compile-time, and splice in the `show` of its ByteString
+-- as a String in the source file.
 loadBestPopToShownByteString :: FilePath -> Q Exp
 loadBestPopToShownByteString fp = do
   addDependentFile fp
