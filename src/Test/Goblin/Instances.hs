@@ -7,6 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.Goblin.Instances where
 
+import           Control.Applicative (liftA2)
 import           Control.Monad (replicateM)
 import           Control.Lens
 import qualified Data.Bimap as Bimap
@@ -58,29 +59,29 @@ instance GeneOps a => Goblin a Char where
 
 instance GeneOps a => Goblin a Integer where
   tinker = tinkerRummagedOrConjureOrSave
-           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+           . tinkerWithToys (map liftA2 [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< toEnum <$> conjure
 
 instance GeneOps a => Goblin a Natural where
   tinker = tinkerRummagedOrConjureOrSave
-           . tinkerWithToys (map applyPruneShrink [(+), (*)])
+           . tinkerWithToys (map liftA2 [(+), (*)])
   conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Int where
   tinker = tinkerRummagedOrConjureOrSave
-           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+           . tinkerWithToys (map liftA2 [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< (\x -> x-1000) <$> transcribeGenesAsInt 2000
 
 instance GeneOps a => Goblin a Word64 where
   tinker = tinkerRummagedOrConjureOrSave
-           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+           . tinkerWithToys (map liftA2 [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< fromIntegral <$> transcribeGenesAsInt 2000
 
 -- | This instance generates Double values in range [0..1] (inclusive) at 0.01
 -- increments. 0.01, 0.02 ... 0.99, 1.00
 instance GeneOps a => Goblin a Double where
   tinker = tinkerRummagedOrConjureOrSave
-           . tinkerWithToys (map applyPruneShrink [(+), (-), (*)])
+           . tinkerWithToys (map liftA2 [(+), (-), (*)])
   conjure = saveInBagOfTricks =<< do
     i <- transcribeGenesAsInt 100
     pure (fromIntegral i / 100)

@@ -26,6 +26,7 @@ library
                        Test.Goblin.Core
                        Test.Goblin.Explainer
                        Test.Goblin.Instances
+                       Test.Goblin.Persist
                        Test.Goblin.TH
                        Test.Goblin.Util
   -- other-modules:

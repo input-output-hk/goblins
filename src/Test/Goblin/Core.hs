@@ -13,21 +13,15 @@ module Test.Goblin.Core
   , (<**>)
   ) where
 
-import           Control.Arrow (first)
 import           Control.Lens
 import           Control.Monad (replicateM)
 import           Control.Monad.Trans.State.Strict (State)
-import qualified Data.Binary as Binary
-import qualified Data.ByteString.Lazy as BL
 import           Data.Typeable (Typeable)
 import           Data.TypeRepMap (TypeRepMap)
 import qualified Data.TypeRepMap as TM
-import           Data.Word (Word64)
 import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-import           Language.Haskell.TH (Q, Exp, runIO, stringE)
-import           Language.Haskell.TH.Syntax (addDependentFile)
 import           Moo.GeneticAlgorithm.Types (Genome, Population)
 
 import           Test.Goblin.Util
@@ -156,31 +150,9 @@ tinkerRummagedOrConjure = do
     Just  v -> onGene (tinker v) (pure v)
 
 
-
--- TODO @mhueschen | make this do what the name says
-applyPruneShrink :: (a -> a -> a)
-                 -> Gen a -> Gen a -> Gen a
-applyPruneShrink f x y = f <$> x <*> y
-
-
 --------------------------------------------------------------------------------
 -- Training goblins
 --------------------------------------------------------------------------------
-
--- | Spawn a goblin from a given genome and a bag of tricks.
-spawnGoblin :: Genome g -> TypeRepMap [] -> GoblinData g
-spawnGoblin = GoblinData
-
-mkEmptyGoblin :: Genome g -> GoblinData g
-mkEmptyGoblin genome = GoblinData genome TM.empty
-
-
---------------------------------------------------------------------------------
--- Helpers
---------------------------------------------------------------------------------
-
-geneListIndex :: GeneOps g => [a] -> TinkerM g Int
-geneListIndex xs = transcribeGenesAsInt (length xs - 1)
 
 
 --------------------------------------------------------------------------------
@@ -222,57 +194,28 @@ class SeedGoblin a where
     -> TinkerM g ()
   seeder x = () <$ saveInBagOfTricks x
 
+
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
 
-decodePopulation :: BL.ByteString -> Population Bool
-decodePopulation bs =
-  -- The added Int tells us how much padding we must remove.
-  let intermediate :: [(([Word64],Int),Double)]
-      intermediate = Binary.decode bs
-   in map (first splitter) intermediate
+-- | Spawn a goblin from a given genome and a bag of tricks.
+mkGoblin :: Genome g -> TypeRepMap [] -> GoblinData g
+mkGoblin = GoblinData
 
-encodePopulation :: Population Bool -> BL.ByteString
-encodePopulation pop =
-  -- The added Int tells us how much padding we must remove.
-  let intermediate :: [(([Word64],Int),Double)]
-      intermediate = map (first grouper) pop
-   in Binary.encode intermediate
+-- | Spawn a goblin from a genome, with an empty TypeRepMap.
+mkEmptyGoblin :: Genome g -> GoblinData g
+mkEmptyGoblin genome = GoblinData genome TM.empty
 
+-- | Use the genome to generate an index within the bounds
+-- of the provided list.
+geneListIndex :: GeneOps g => [a] -> TinkerM g Int
+geneListIndex xs = transcribeGenesAsInt (length xs - 1)
+
+-- | Convenience Hedgehog generator.
 genPopulation :: Gen (Population Bool)
 genPopulation = do
   genomeSize <- Gen.int (Range.linear 0 1000)
   Gen.list (Range.linear 0 300) $ do
     genome <- replicateM genomeSize Gen.bool
     (,) <$> pure genome <*> Gen.double (Range.constant 0 (10.0^^(3::Int)))
-
-readFirstGenomeFromFile :: FilePath -> IO [Bool]
-readFirstGenomeFromFile filePath =
-  (fst . head) <$> readPopulationFromFile filePath
-
-readPopulationFromFile :: FilePath -> IO (Population Bool)
-readPopulationFromFile filePath =
-  decodePopulation <$> BL.readFile filePath
-
-writePopulationToFile :: FilePath -> Population Bool -> IO ()
-writePopulationToFile filePath pop =
-  BL.writeFile filePath (encodePopulation pop)
-
-loadBestPopToShownByteString :: FilePath -> Q Exp
-loadBestPopToShownByteString fp = do
-  addDependentFile fp
-  stringE . show =<< (runIO $ do
-    bs <- BL.readFile fp
-    let best = head (decodePopulation bs)
-    pure (encodePopulation [best]))
-
-loadGoblinDataFromFilePath :: FilePath
-                           -> Q Exp
-loadGoblinDataFromFilePath fp = [|
-  let popStr = $(loadBestPopToShownByteString fp)
-      genome = case decodePopulation (read popStr) of
-                 [] -> error "sigGenChain: impossible"
-                 (x,_):_ -> x
-   in mkEmptyGoblin genome
-   |]
