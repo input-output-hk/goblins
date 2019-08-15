@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell       #-}
 module Test.Goblin.TH where
 
-import           Control.Monad (foldM, forM, unless)
+import           Control.Monad (foldM, forM)
 import           Data.Typeable (Typeable)
 import           Language.Haskell.TH
 import           TH.ReifySimple
@@ -46,12 +46,13 @@ deriveGoblin name = do
   wrapTyVars acc cpn = AppT acc (VarT cpn)
 
   makeTinker con = do
-    unless (length (dcFields con) > 0) $
-      error "not enough fields"
-    argName <- newName "arg"
-    let pat = VarP argName
-    body <- mkBody argName
-    pure (FunD (mkName "tinker") [Clause [pat] (NormalB body) []])
+    if length (dcFields con) <= 0
+       then mkPureDec "tinker"
+       else do
+         argName <- newName "arg"
+         let pat = VarP argName
+         body <- mkBody argName
+         pure (FunD (mkName "tinker") [Clause [pat] (NormalB body) []])
    where
     mkBody argName = do
       fieldNames <- forM (dcFields con) (const (newName "field"))
@@ -67,14 +68,19 @@ deriveGoblin name = do
       [| tinkerRummagedOrConjureOrSave $(tinkerBody) |]
 
   makeConjure con = do
-    unless (length (dcFields con) > 0) $
-      error "not enough fields"
-    start <- [| $(pure (ConE (dcName con))) <$> conjure |]
-    body <- foldM (\acc _ -> [| $(pure acc) <*> conjure |])
-                  start
-                  (tail (dcFields con))
-    cb <- [| saveInBagOfTricks =<< $(pure body) |]
-    pure (FunD (mkName "conjure") [Clause [] (NormalB cb) []])
+    if length (dcFields con) <= 0
+       then mkNullaryDefn
+       else do
+         start <- [| $(pure (ConE (dcName con))) <$> conjure |]
+         body <- foldM (\acc _ -> [| $(pure acc) <*> conjure |])
+                       start
+                       (tail (dcFields con))
+         cb <- [| saveInBagOfTricks =<< $(pure body) |]
+         pure (FunD (mkName "conjure") [Clause [] (NormalB cb) []])
+   where
+    mkNullaryDefn = do
+      body <- [| pure $(pure (ConE (dcName con))) |]
+      pure (FunD (mkName "conjure") [Clause [] (NormalB body) []])
 
 
 --------------------------------------------------------------------------------
@@ -107,18 +113,19 @@ deriveAddShrinks name = do
           ( $(pure (foldl wrapTyVars (ConT name) classParamNames)) ) |]
   wrapTyVars acc cpn = AppT acc (VarT cpn)
 
-  makeAddShrinks con = do
-    unless (length (dcFields con) > 0) $
-      error "not enough fields"
-    fieldNames <- forM (dcFields con) (const (newName "field"))
-    let pat = ConP (dcName con) (map VarP fieldNames)
+  makeAddShrinks con =
+    if length (dcFields con) <= 0
+       then mkPureDec "addShrinks"
+       else do
+         fieldNames <- forM (dcFields con) (const (newName "field"))
+         let pat = ConP (dcName con) (map VarP fieldNames)
 
-    start <- [| $(pure (makeConPacker (dcName con) fieldNames))
-                  <$> addShrinks $(pure (VarE (head fieldNames))) |]
-    body <- foldM (\acc v -> [| $(pure acc) <*> addShrinks $(pure (VarE v)) |])
-                  start
-                  (tail (fieldNames))
-    pure (FunD (mkName "addShrinks") [Clause [pat] (NormalB body) []])
+         start <- [| $(pure (makeConPacker (dcName con) fieldNames))
+                       <$> addShrinks $(pure (VarE (head fieldNames))) |]
+         body <- foldM (\acc v -> [| $(pure acc) <*> addShrinks $(pure (VarE v)) |])
+                       start
+                       (tail (fieldNames))
+         pure (FunD (mkName "addShrinks") [Clause [pat] (NormalB body) []])
 
 
 --------------------------------------------------------------------------------
@@ -190,3 +197,9 @@ makeAccessors conName argNames =
      in LamE [pat] (VarE arg)
   | i <- [0 .. length argNames - 1]
   ]
+
+-- | Create a decl of the form `<name> = pure`
+mkPureDec :: String -> Q Dec
+mkPureDec name = do
+  body <- [| pure |]
+  pure (FunD (mkName name) [Clause [] (NormalB body) []])
