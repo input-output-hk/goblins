@@ -134,17 +134,11 @@ deriveAddShrinks :: Name -> Q [Dec]
 deriveAddShrinks name = do
   (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
   classParamNames <- forM dTyVars (const (newName "arg"))
-  let con = ensureSingleton dCons
   ctx <- wrapWithConstraints classParamNames
   decTy <- makeInstanceType classParamNames
-  addShr <- makeAddShrinks con
-  pure [InstanceD Nothing ctx decTy [addShr]]
+  addShrinkDec <- makeAddShrinks dCons
+  pure [InstanceD Nothing ctx decTy [addShrinkDec]]
  where
-  ensureSingleton dCons =
-    case dCons of
-      []  -> error "deriveAddShrinks: cannot derive AddShrinks for a void type"
-      [x] -> x
-      _   -> error "deriveAddShrinks: cannot derive AddShrinks for a sum type"
 
   -- Create constraints `(AddShrinks a ...) => ...` for the instance
   wrapWithConstraints = sequence .
@@ -156,9 +150,20 @@ deriveAddShrinks name = do
           ( $(pure (foldl wrapTyVars (ConT name) classParamNames)) ) |]
   wrapTyVars acc cpn = AppT acc (VarT cpn)
 
-  makeAddShrinks con =
+  makeAddShrinks :: [DataCon] -> Q Dec
+  makeAddShrinks dcs = do
+    clauses <- mapM makeAddShrinksClause dcs
+    pure (FunD (mkName "addShrinks") clauses)
+
+  makeAddShrinksClause :: DataCon -> Q Clause
+  makeAddShrinksClause con =
     if length (dcFields con) <= 0
-       then mkPureDec "addShrinks"
+
+       then do
+         field <- newName "field"
+         let body = VarE field
+         pure (Clause [VarP field] (NormalB body) [])
+
        else do
          fieldNames <- forM (dcFields con) (const (newName "field"))
          let pat = ConP (dcName con) (map VarP fieldNames)
@@ -168,7 +173,7 @@ deriveAddShrinks name = do
          body <- foldM (\acc v -> [| $(pure acc) <*> addShrinks $(pure (VarE v)) |])
                        start
                        (tail (fieldNames))
-         pure (FunD (mkName "addShrinks") [Clause [pat] (NormalB body) []])
+         pure (Clause [pat] (NormalB body) [])
 
 
 --------------------------------------------------------------------------------
@@ -195,17 +200,11 @@ deriveSeedGoblin :: Name -> Q [Dec]
 deriveSeedGoblin name = do
   (DataType _dName dTyVars _dCtx dCons) <- reifyDataType name
   classParamNames <- forM dTyVars (const (newName "arg"))
-  let con = ensureSingleton dCons
   ctx <- wrapWithConstraints classParamNames
   decTy <- makeInstanceType classParamNames
-  sdr <- makeSeeder con
+  sdr <- makeSeeder dCons
   pure [InstanceD Nothing ctx decTy [sdr]]
  where
-  ensureSingleton dCons =
-    case dCons of
-      []  -> error "deriveSeedGoblin: cannot derive SeedGoblin for a void type"
-      [x] -> x
-      _   -> error "deriveSeedGoblin: cannot derive SeedGoblin for a sum type"
 
   -- Create constraints `(SeedGoblin a ...) => ...` for the instance
   wrapWithConstraints = sequence .
@@ -220,7 +219,13 @@ deriveSeedGoblin name = do
           ( $(pure (foldl wrapTyVars (ConT name) classParamNames)) ) |]
   wrapTyVars acc cpn = AppT acc (VarT cpn)
 
-  makeSeeder con = do
+  makeSeeder :: [DataCon] -> Q Dec
+  makeSeeder dcs = do
+    clauses <- mapM makeSeederClause dcs
+    pure (FunD (mkName "seeder") clauses)
+
+  makeSeederClause :: DataCon -> Q Clause
+  makeSeederClause con = do
     asName <- newName "argAs"
     fieldNames <- forM (dcFields con) (const (newName "field"))
     let pat = AsP asName (ConP (dcName con) (map VarP fieldNames))
@@ -229,8 +234,7 @@ deriveSeedGoblin name = do
     seedRest <- forM fieldNames $ \vName -> do
                   [| seeder $(pure (VarE vName)) |]
     let stmts = map NoBindS (seedAs:seedRest)
-    pure (FunD (mkName "seeder") [Clause [pat] (NormalB (DoE stmts)) []])
-
+    pure (Clause [pat] (NormalB (DoE stmts)) [])
 
 --------------------------------------------------------------------------------
 -- Helpers
