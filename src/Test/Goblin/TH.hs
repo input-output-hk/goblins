@@ -161,7 +161,7 @@ deriveAddShrinks name = do
 
        then do
          field <- newName "field"
-         let body = VarE field
+         body <- [| pure $(pure (VarE field)) |]
          pure (Clause [VarP field] (NormalB body) [])
 
        else do
