@@ -11,7 +11,6 @@ import qualified Data.ByteString.Lazy as BL
 import           Data.List.Extra (chunksOf)
 import           Data.Word (Word64)
 import           Language.Haskell.TH (Q, Exp, runIO, stringE)
-import           Language.Haskell.TH.Syntax (addDependentFile)
 import           Moo.GeneticAlgorithm.Types (Population)
 
 
@@ -51,7 +50,6 @@ writePopulationToFile filePath pop =
 -- as a String in the source file.
 loadBestPopToShownByteString :: FilePath -> Q Exp
 loadBestPopToShownByteString fp = do
-  addDependentFile fp
   stringE . show =<< (runIO $ do
     bs <- BL.readFile fp
     let best = head (decodePopulation bs)
