@@ -10,7 +10,6 @@ import qualified Hedgehog.Range as Range
 import qualified System.IO.Temp as Temp
 
 import Test.Goblin
-import Test.Goblin.Util
 
 
 prop_integralBitsRoundTripWord8 :: Property
