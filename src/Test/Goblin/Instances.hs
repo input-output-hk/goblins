@@ -353,3 +353,9 @@ instance (SeedGoblin a, Typeable a) => SeedGoblin (Set.Set a) where
   seeder xs = do
     () <$ saveInBagOfTricks xs
     () <$ sequenceA (seeder <$> Set.toList xs)
+instance (SeedGoblin a, Typeable a) => SeedGoblin (Maybe a) where
+  seeder mb = do
+    () <$ saveInBagOfTricks mb
+    case mb of
+      Nothing -> pure ()
+      Just x -> seeder x
