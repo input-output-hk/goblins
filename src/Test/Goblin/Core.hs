@@ -14,7 +14,6 @@ module Test.Goblin.Core
   , (<**>)
   ) where
 
-import           Control.Lens
 import           Control.Monad (replicateM)
 import           Control.Monad.Trans.State.Strict (State)
 import           Data.Typeable (Typeable)
@@ -23,6 +22,8 @@ import qualified Data.TypeRepMap as TM
 import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+import           Lens.Micro.Mtl ((%=), (.=), use)
+import           Lens.Micro.TH (makeLenses)
 import           Moo.GeneticAlgorithm.Types (Genome, Population)
 
 import           Test.Goblin.Util

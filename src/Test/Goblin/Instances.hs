@@ -9,7 +9,6 @@ module Test.Goblin.Instances where
 
 import           Control.Applicative (liftA2)
 import           Control.Monad (replicateM)
-import           Control.Lens
 import qualified Data.Bimap as Bimap
 import           Data.Char (chr)
 import           Data.List (splitAt)
@@ -22,6 +21,7 @@ import           Data.Typeable (Typeable)
 import           Data.Word (Word8, Word64)
 import           Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
+import           Lens.Micro.Mtl ((.=), use)
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
 import           Numeric.Natural (Natural)
 
