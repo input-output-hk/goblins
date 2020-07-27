@@ -38,7 +38,9 @@ library
                      , containers
                      , extra
                      , hedgehog
-                     , lens
+                     , microlens
+                     , microlens-mtl
+                     , microlens-th
                      , mmorph
                      , monad-control
                      , moo
