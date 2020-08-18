@@ -11,7 +11,6 @@ import           Control.Applicative (liftA2)
 import           Control.Monad (replicateM)
 import qualified Data.Bimap as Bimap
 import           Data.Char (chr)
-import           Data.List (splitAt)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import           Data.Ratio (Ratio)
