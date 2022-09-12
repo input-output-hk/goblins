@@ -3,29 +3,30 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeApplications      #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.Goblin.Instances where
 
-import           Control.Applicative (liftA2)
-import           Control.Monad (replicateM)
-import qualified Data.Bimap as Bimap
-import           Data.Char (chr)
-import qualified Data.List as List
-import qualified Data.Map as Map
-import           Data.Ratio (Ratio)
-import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
-import           Data.Typeable (Typeable)
-import           Data.Word (Word8, Word64)
-import           Hedgehog (Gen)
-import qualified Hedgehog.Gen as Gen
-import           Lens.Micro.Mtl ((.=), use)
+import           Control.Applicative         (liftA2)
+import           Control.Monad               (replicateM)
+import qualified Data.Bimap                  as Bimap
+import           Data.Char                   (chr)
+import qualified Data.List                   as List
+import qualified Data.Map                    as Map
+import           Data.Ratio                  (Ratio)
+import qualified Data.Sequence               as Seq
+import qualified Data.Set                    as Set
+import           Data.Typeable               (Typeable)
+import           Data.Word                   (Word64, Word8)
+import           Hedgehog                    (Gen)
+import qualified Hedgehog.Gen                as Gen
+import           Lens.Micro.Mtl              (use, (.=))
 import           Moo.GeneticAlgorithm.Binary (bitsNeeded, decodeBinary)
-import           Numeric.Natural (Natural)
+import           Numeric.Natural             (Natural)
 
-import Test.Goblin.Core
-import Test.Goblin.TH
+import           Test.Goblin.Core
+import           Test.Goblin.TH
 
 
 instance GeneOps Bool where
@@ -41,6 +42,45 @@ instance GeneOps Bool where
     if base == 0
        then error "transcribeGenesAsInt: divide by zero"
        else return $ decodeBinary (0, n) gs `mod` base
+
+--------------------------------------------------------------------------------
+-- AddShrinks
+--------------------------------------------------------------------------------
+
+instance AddShrinks () where
+instance AddShrinks Bool where
+instance AddShrinks Char where
+instance AddShrinks Double where
+instance AddShrinks Integer where
+instance AddShrinks Natural where
+instance AddShrinks Int where
+instance AddShrinks Word8 where
+instance AddShrinks Word64 where
+
+deriveAddShrinks ''(,)
+deriveAddShrinks ''(,,)
+deriveAddShrinks ''(,,,)
+deriveAddShrinks ''(,,,,)
+deriveAddShrinks ''(,,,,,)
+deriveAddShrinks ''(,,,,,,)
+deriveAddShrinks ''(,,,,,,,)
+deriveAddShrinks ''(,,,,,,,,)
+deriveAddShrinks ''(,,,,,,,,,)
+deriveAddShrinks ''(,,,,,,,,,,)
+deriveAddShrinks ''Ratio
+
+instance (AddShrinks k, Ord k, AddShrinks v) => AddShrinks (Map.Map k v) where
+  addShrinks xs = Map.fromList <$> mapM addShrinks (Map.toList xs)
+
+instance AddShrinks a => AddShrinks [a] where
+  addShrinks ls = mapM addShrinks ls
+
+instance (AddShrinks a, Ord a) => AddShrinks (Set.Set a) where
+  addShrinks xs = Set.fromList <$> mapM addShrinks (Set.toList xs)
+
+instance AddShrinks a => AddShrinks (Maybe a) where
+  addShrinks Nothing  = pure Nothing
+  addShrinks (Just x) = Just <$> addShrinks x
 
 --------------------------------------------------------------------------------
 -- Primitive goblins
@@ -115,7 +155,7 @@ instance (Goblin g a, AddShrinks a)
 -- | Our list goblin behaves slightly differently, since it pulls whole lists of
 -- things from the bag of tricks, and is also specialised to do some more
 -- messing about with lists.
-instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
+instance (AddShrinks a, Eq a, Goblin g a)
       => Goblin g [a] where
   tinker obj = tinkerRummagedOrConjureOrSave $ do
     rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
@@ -161,7 +201,7 @@ instance (AddShrinks a, Eq a, Typeable a, GeneOps g, Goblin g a)
     listLen <- transcribeGenesAsInt 15
     replicateM listLen conjure
 
-instance (Goblin g a, Ord a, AddShrinks a, Typeable a)
+instance (Goblin g a, Ord a, AddShrinks a)
       => Goblin g (Set.Set a) where
   tinker obj = tinkerRummagedOrConjureOrSave $ do
     rummaged <- (map (sequenceA . map addShrinks)) <$> rummageAll
@@ -210,8 +250,7 @@ instance (Goblin g a, Ord a, AddShrinks a, Typeable a)
     cs <- replicateM listLen conjure
     pure (Set.fromList cs)
 
-instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, AddShrinks (Map.Map k v),
-          AddShrinks k, AddShrinks v, Typeable k, Typeable v)
+instance (Goblin g k, Goblin g v, Ord k, Eq v, AddShrinks k, AddShrinks v)
          => Goblin g (Map.Map k v) where
     tinker obj = tinkerRummagedOrConjureOrSave $ do
       rummagedKeys <- (map (sequenceA . map addShrinks)) <$> rummageAll
@@ -263,45 +302,6 @@ instance (Goblin g k, Goblin g v, Ord k, Eq k, Eq v, AddShrinks (Map.Map k v),
       listLen <- transcribeGenesAsInt 15
       cs <- replicateM listLen conjure
       pure (Map.fromList cs)
-
---------------------------------------------------------------------------------
--- AddShrinks
---------------------------------------------------------------------------------
-
-instance AddShrinks () where
-instance AddShrinks Bool where
-instance AddShrinks Char where
-instance AddShrinks Double where
-instance AddShrinks Integer where
-instance AddShrinks Natural where
-instance AddShrinks Int where
-instance AddShrinks Word8 where
-instance AddShrinks Word64 where
-
-deriveAddShrinks ''(,)
-deriveAddShrinks ''(,,)
-deriveAddShrinks ''(,,,)
-deriveAddShrinks ''(,,,,)
-deriveAddShrinks ''(,,,,,)
-deriveAddShrinks ''(,,,,,,)
-deriveAddShrinks ''(,,,,,,,)
-deriveAddShrinks ''(,,,,,,,,)
-deriveAddShrinks ''(,,,,,,,,,)
-deriveAddShrinks ''(,,,,,,,,,,)
-deriveAddShrinks ''Ratio
-
-instance (AddShrinks k, Ord k, AddShrinks v) => AddShrinks (Map.Map k v) where
-  addShrinks xs = Map.fromList <$> mapM addShrinks (Map.toList xs)
-
-instance AddShrinks a => AddShrinks [a] where
-  addShrinks ls = mapM addShrinks ls
-
-instance (AddShrinks a, Ord a) => AddShrinks (Set.Set a) where
-  addShrinks xs = Set.fromList <$> mapM addShrinks (Set.toList xs)
-
-instance AddShrinks a => AddShrinks (Maybe a) where
-  addShrinks Nothing  = pure Nothing
-  addShrinks (Just x) = Just <$> addShrinks x
 
 --------------------------------------------------------------------------------
 -- SeedGoblin
@@ -357,4 +357,4 @@ instance (SeedGoblin a, Typeable a) => SeedGoblin (Maybe a) where
     () <$ saveInBagOfTricks mb
     case mb of
       Nothing -> pure ()
-      Just x -> seeder x
+      Just x  -> seeder x
