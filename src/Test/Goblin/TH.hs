@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | Template Haskell derivation functions for the goblin-related typeclasses.
@@ -7,12 +8,13 @@ module Test.Goblin.TH
   , deriveSeedGoblin
   ) where
 
-import           Control.Monad (foldM, forM)
-import           Data.Typeable (Typeable)
+import           Control.Monad              (foldM, forM)
+import           Data.Typeable              (Typeable)
 import           Language.Haskell.TH
+import           Language.Haskell.TH.Syntax
 import           TH.ReifySimple
 
-import Test.Goblin.Core
+import           Test.Goblin.Core
 
 
 --------------------------------------------------------------------------------
@@ -166,7 +168,7 @@ deriveAddShrinks name = do
 
        else do
          fieldNames <- forM (dcFields con) (const (newName "field"))
-         let pat = ConP (dcName con) (map VarP fieldNames)
+         let pat = mkConP (dcName con) (map VarP fieldNames)
 
          start <- [| $(pure (makeConPacker (dcName con) fieldNames))
                        <$> addShrinks $(pure (VarE (head fieldNames))) |]
@@ -228,13 +230,13 @@ deriveSeedGoblin name = do
   makeSeederClause con = do
     asName <- newName "argAs"
     fieldNames <- forM (dcFields con) (const (newName "field"))
-    let pat = AsP asName (ConP (dcName con) (map VarP fieldNames))
+    let pat = AsP asName (mkConP (dcName con) (map VarP fieldNames))
 
     seedAs <- [| () <$ saveInBagOfTricks $(pure (VarE asName)) |]
     seedRest <- forM fieldNames $ \vName -> do
                   [| seeder $(pure (VarE vName)) |]
     let stmts = map NoBindS (seedAs:seedRest)
-    pure (Clause [pat] (NormalB (DoE stmts)) [])
+    pure (Clause [pat] (NormalB (mkDoE Nothing stmts)) [])
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -256,7 +258,7 @@ makeAccessors conName argNames =
   [ let front = replicate i WildP
         back  = replicate (length argNames - i - 1) WildP
         arg   = argNames !! i
-        pat = ConP conName (front ++ [VarP arg] ++ back)
+        pat = mkConP conName (front ++ [VarP arg] ++ back)
      in LamE [pat] (VarE arg)
   | i <- [0 .. length argNames - 1]
   ]
@@ -266,3 +268,17 @@ mkPureDec :: String -> Q Dec
 mkPureDec name = do
   body <- [| pure |]
   pure (FunD (mkName name) [Clause [] (NormalB body) []])
+
+mkConP :: Name -> [Pat] -> Pat
+#if MIN_VERSION_template_haskell (2, 18, 0)
+mkConP n ps = ConP n [] ps
+#else
+mkConP = ConP
+#endif
+
+mkDoE :: Maybe ModName -> [Stmt] -> Exp
+#if MIN_VERSION_template_haskell (2, 18, 0)
+mkDoE mmn stmts = DoE mmn stmts
+#else
+mkDoE _         = DoE
+#endif
