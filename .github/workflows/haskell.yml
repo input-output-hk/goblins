@@ -53,10 +53,10 @@ jobs:
           cache-${{ env.CACHE_VERSION }}-${{ runner.os }}-${{ matrix.ghc }}-
 
     - name: Install dependencies
-      run: cabal build all --only-dependencies
+      run: cabal build cabal build plutus-ledger-api plutus-tx plutus-core prettyprinter-configurable word-array --enable-tests --disable-benchmarks --only-dependencies
 
     - name: Build
-      run: cabal build all
+      run: cabal build cabal build plutus-ledger-api plutus-tx plutus-core prettyprinter-configurable word-array --enable-tests --disable-benchmarks
 
     - name: Run tests
-      run: cabal test all
+      run: cabal test cabal build plutus-ledger-api plutus-tx plutus-core prettyprinter-configurable word-array --enable-tests --disable-benchmarks
